@@ -1,0 +1,60 @@
+# =========================
+# Jupyter / Python noise
+# =========================
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+__pycache__/
+*.py[cod]
+
+# =========================
+# OS / Editor
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Secrets (DO NOT COMMIT)
+# =========================
+.env
+.env.*
+configs/*secret*.yaml
+configs/*key*.yaml
+
+# =========================
+# Data & Artifacts (structure kept, contents ignored)
+# =========================
+
+# Raw / processed data (keep folder via .gitkeep)
+raw_data/*
+process_data/*
+!raw_data/.gitkeep
+!process_data/.gitkeep
+
+# Generated artifacts
+artifacts/cache/*
+artifacts/reports/*
+!artifacts/cache/.gitkeep
+!artifacts/reports/.gitkeep
+
+# =========================
+# Generated large files (pipeline outputs)
+# =========================
+*.jsonl
+*.psv
+
+# CSVs are usually large outputs — ignore by default
+# (override explicitly if needed)
+*.csv
+
+# =========================
+# Allowlist (explicitly tracked)
+# =========================
+
+# Versioned configs
+!configs/parameters.yaml
+!configs/prompts.yaml
+!configs/credentials.yaml
+
+# Project essentials
+!requirements.txt
+!exploration.ipynb

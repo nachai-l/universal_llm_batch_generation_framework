@@ -1,0 +1,18 @@
+# configs/parameters.yaml
+llm:
+  model_name: "gemini-3-flash-preview" # gemini-3-pro-preview / gemini-3-flash-preview / gemini-2.5-flash
+  temperature: 1.0 # Recommended 1.0, for Gemini 3 to avoid degradation, otherwise 0.3
+  progress_log_every: 1000
+  max_rows_per_run: 20001  # or 10 / 50 / 20001 / 'all' 
+
+  # Concurrency for LLM calls (simple thread pool / async batching later)
+  max_workers: 10
+  silence_client_lv_logs: true
+
+  # Location to store LLM artifacts to be used instead of LLM call when force is not set to true
+  force: true
+  artifact_folder: "artifacts/"
+
+outputs:
+  job_postings_dq_eval_csv: "artifacts/reports/job_postings_dq_eval.csv"
+  job_postings_dq_eval_jsonl: "artifacts/reports/job_postings_dq_eval.jsonl"
