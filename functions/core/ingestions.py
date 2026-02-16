@@ -1,80 +1,275 @@
 # functions/core/ingestions.py
 """
-functions.core.ingestions.py
+functions.core.ingestions
 
-CSV → PSV Cleaning Utility (Pandas-based)
+Universal delimited ingestion + deterministic cleaning helpers.
 
-Intent
-- Normalize and sanitize raw Lightcast-style CSV extracts that contain
-  escaped characters, multiline fields, and inconsistent null tokens.
-- Convert the cleaned result into a pipe-separated (PSV) format suitable
-  for downstream ingestion, diffing, or large-scale processing.
+Includes:
+- read_delimited_table(): robust CSV/TSV/PSV reader (multiline quoted fields supported)
+- clean_dataframe(): deterministic cell normalization for PSV conversion and downstream
+- clean_delimited_to_psv(): read + clean + write stable PSV
+- ingest_input_table_pipeline2(): Pipeline 2 ingestion -> readable JSON artifact payload
 
-What this function does
-- Reads CSV safely:
-  - Handles quoted, multi-line fields
-  - Skips malformed rows instead of failing the pipeline
-- Field-level normalization:
-  - Cleans ISCED_LEVELS_NAME by removing brackets, quotes, escapes, and newlines
-  - Normalizes all columns by:
-    - Unescaping commas
-    - Removing stray backslashes
-    - Flattening newlines/carriage returns
-    - Stripping surrounding whitespace
-    - Converting common null tokens ([None], nan, NaN) to empty strings
-- Writes a deterministic PSV output (QUOTE_NONE, `|` separator)
+Design decisions (Pipeline 2)
+- Data types: read as str for determinism
+- Missing cells: normalize missing/blank -> "NaN"
+- Artifact format: JSON (readable)
 
-Design principles
-- Deterministic and non-LLM: safe for batch preprocessing and CI runs
-- Loss-minimizing: skips only irrecoverably malformed rows
-- Pandas-only implementation for portability and transparency
-- Returns the cleaned DataFrame for optional in-memory reuse
-
-Typical usage
-- Pre-clean raw job posting exports before:
-  - LLM-based data quality validation
-  - Schema enforcement
-  - Bulk loading into analytics databases
+Note
+- clean_dataframe() is intended for PSV export / normalization use cases and follows
+  the expectations in tests/test_ingestions.py (null-ish tokens become "").
+- ingest_input_table_pipeline2() is intended for readable inspection artifacts and uses
+  "NaN" sentinel for missing cells (per pipeline 2 design decision).
 """
 
-import pandas as pd
-import re
+from __future__ import annotations
 
-def clean_csv_to_psv_pandas(input_file, output_file):
+import csv
+from pathlib import Path
+from typing import Any, Dict, Iterable, Literal, Optional
+
+import pandas as pd
+
+InputFormat = Literal["csv", "tsv", "psv"]
+
+_DEFAULT_DELIMS: Dict[str, str] = {
+    "csv": ",",
+    "tsv": "\t",
+    "psv": "|",
+}
+
+# Common "null-ish" strings found in exports (case-insensitive)
+_NULL_TOKENS = {
+    "",
+    "none",
+    "[none]",
+    "null",
+    "nan",
+    "na",
+    "n/a",
+    "<na>",
+}
+
+
+def _normalize_cell(x: object) -> str:
     """
-    Clean CSV file and convert to PSV format using pandas.
-    
-    Args:
-        input_file (str): Path to input CSV file
-        output_file (str): Path to output PSV file
+    Normalize a single cell to a cleaned string (PSV-friendly).
+
+    Rules (matches tests/test_ingestions.py):
+    - None / NaN -> ""
+    - Trim outer whitespace
+    - Replace CR/LF/TAB with single spaces (so each record stays one line in PSV)
+    - Normalize common null tokens (e.g., "NaN", "NULL", "n/a", "[None]") to ""
+    - Fix conservative escape artifacts:
+        - '\\,' -> ','
+        - remove stray backslashes: '\\' -> ''
     """
-    # Read CSV with proper handling of quoted multi-line fields
+    if x is None:
+        return ""
+
+    if pd.isna(x):
+        return ""
+
+    s = str(x)
+
+    s = s.replace("\r\n", "\n").replace("\r", "\n").replace("\t", " ")
+    s = s.replace("\n", " ")
+
+    s = s.replace("\\,", ",")
+    s = s.replace("\\", "")
+
+    s = " ".join(s.split()).strip()
+
+    if s.lower() in _NULL_TOKENS:
+        return ""
+
+    return s
+
+
+def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean a DataFrame deterministically:
+    - preserve columns as-is
+    - normalize every cell to a cleaned string (PSV-friendly)
+    """
+    out = df.copy()
+    for col in out.columns:
+        out[col] = out[col].map(_normalize_cell)
+    return out
+
+
+def read_delimited_table(
+    path: str | Path,
+    fmt: InputFormat = "csv",
+    *,
+    delimiter: Optional[str] = None,
+    encoding: str = "utf-8",
+) -> pd.DataFrame:
+    """
+    Read a delimited file robustly:
+    - handles quoted multi-line fields via engine="python"
+    - skips malformed rows instead of failing the pipeline
+    - dtype=str, keep_default_na=False to avoid implicit NaN conversion
+
+    NOTE:
+    - This returns the raw read result (newlines inside quoted fields are preserved).
+      clean_dataframe() flattens those newlines later.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Input file not found: {p}")
+
+    fmt_norm = str(fmt).lower().strip()
+    if fmt_norm not in _DEFAULT_DELIMS:
+        raise ValueError(f"Unsupported fmt: {fmt}. Expected one of: csv|tsv|psv")
+
+    sep = delimiter if delimiter is not None else _DEFAULT_DELIMS[fmt_norm]
+
     df = pd.read_csv(
-        input_file,
-        quoting=1,  # QUOTE_ALL
-        escapechar='\\',
-        on_bad_lines='skip'  # Skip malformed lines
+        p,
+        sep=sep,
+        encoding=encoding,
+        dtype=str,
+        keep_default_na=False,
+        engine="python",
+        on_bad_lines="skip",
     )
-    
-    # Clean ISCED_LEVELS_NAME - remove brackets, quotes, newlines, backslashes
-    if 'ISCED_LEVELS_NAME' in df.columns:
-        df['ISCED_LEVELS_NAME'] = df['ISCED_LEVELS_NAME'].apply(
-            lambda x: re.sub(r'[\[\]"\\n\r]', '', str(x)).strip() if pd.notna(x) else ''
-        )
-    
-    # Clean all fields - fix escaped commas and [None] values
-    for col in df.columns:
-        df[col] = df[col].apply(
-            lambda x: str(x).replace('\\,', ',').replace('\\', '').replace('\n', ' ').replace('\r', ' ').strip() 
-            if pd.notna(x) else ''
-        )
-        df[col] = df[col].replace('[None]', '')
-        df[col] = df[col].replace('nan', '')
-        df[col] = df[col].replace('NaN', '')
-    
-    # Write as PSV
-    df.to_csv(output_file, sep='|', index=False, quoting=0)  # QUOTE_NONE for output
-    
-    print(f"✅ Cleaned and converted {input_file} to {output_file}")
-    print(f"   Total rows: {len(df)}")
     return df
+
+
+def clean_delimited_to_psv(
+    input_file: str | Path,
+    output_file: str | Path,
+    *,
+    fmt: InputFormat = "csv",
+    delimiter: Optional[str] = None,
+    encoding: str = "utf-8",
+) -> pd.DataFrame:
+    """
+    Read a delimited table, clean it, and write deterministic PSV.
+
+    PSV output behavior:
+    - sep='|'
+    - QUOTE_NONE
+    - escapechar='\\'
+    - utf-8
+    """
+    df = read_delimited_table(input_file, fmt=fmt, delimiter=delimiter, encoding=encoding)
+    df_clean = clean_dataframe(df)
+
+    out_path = Path(output_file)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    df_clean.to_csv(
+        out_path,
+        sep="|",
+        index=False,
+        encoding="utf-8",
+        quoting=csv.QUOTE_NONE,
+        escapechar="\\",
+    )
+
+    return df_clean
+
+
+# ---------------------------------------------------------------------
+# Pipeline 2 ingestion (readable JSON artifact)
+# ---------------------------------------------------------------------
+
+def _validate_required_columns_present(df: pd.DataFrame, required: Optional[Iterable[str]]) -> None:
+    req = [c for c in (required or []) if str(c).strip()]
+    if not req:
+        return
+    missing = [c for c in req if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}. Found columns: {list(df.columns)}")
+
+
+def _read_input_table_any(
+    path: str | Path,
+    fmt: str,
+    *,
+    encoding: str = "utf-8",
+    sheet: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Pipeline-2 oriented reader:
+    - reads everything as str deterministically
+    - keep_default_na=False (avoid pandas NaN)
+    - supports csv/tsv/psv/xlsx
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Input file not found: {p}")
+
+    fmt_norm = str(fmt).lower().strip()
+
+    if fmt_norm in ("csv", "tsv", "psv"):
+        sep = _DEFAULT_DELIMS.get(fmt_norm)
+        if sep is None:
+            raise ValueError(f"Unsupported fmt: {fmt}. Expected one of: csv|tsv|psv|xlsx")
+        return pd.read_csv(p, sep=sep, encoding=encoding, dtype=str, keep_default_na=False)
+
+    if fmt_norm == "xlsx":
+        sheet_name = sheet if sheet is not None else "Sheet1"
+        return pd.read_excel(p, sheet_name=sheet_name, dtype=str, keep_default_na=False)
+
+    raise ValueError(f"Unsupported fmt: {fmt}. Expected one of: csv|tsv|psv|xlsx")
+
+
+def ingest_input_table_pipeline2(params: Any) -> dict[str, Any]:
+    """
+    Pipeline 2 core ingestion.
+
+    Expected by tests/test_pipeline_2_ingest_input.py:
+      - obj["meta"]["n_rows"] exists
+      - obj["meta"]["n_cols"] exists
+      - obj["rows"] exists (list of row dicts)
+    """
+    in_cfg = params.input
+    df = _read_input_table_any(
+        in_cfg.path,
+        in_cfg.format,
+        encoding=getattr(in_cfg, "encoding", "utf-8"),
+        sheet=getattr(in_cfg, "sheet", None),
+    )
+
+    _validate_required_columns_present(df, getattr(in_cfg, "required_columns", None))
+
+    # Normalize missing/blank -> "NaN" sentinel (for readable artifact)
+    df2 = df.copy()
+    for col in df2.columns:
+        s = df2[col].astype(str)
+        s = s.map(lambda v: "NaN" if (v is None or str(v).strip() == "" or pd.isna(v)) else str(v))
+        df2[col] = s
+
+    rows = df2.to_dict(orient="records")
+
+    n_rows = int(df2.shape[0])
+    n_cols = int(df2.shape[1])
+    cols = list(df2.columns)
+
+    payload: dict[str, Any] = {
+        "meta": {
+            "input_path": str(in_cfg.path),
+            "input_format": str(in_cfg.format),
+            "n_rows": n_rows,
+            "n_cols": n_cols,
+            "columns": cols,  # ✅ add this
+        },
+        "columns": cols,  # (optional keep)
+        "rows": rows,
+        "n_rows": n_rows,
+        "n_cols": n_cols,
+        "records": rows,
+    }
+
+    return payload
+
+
+__all__ = [
+    "clean_dataframe",
+    "read_delimited_table",
+    "clean_delimited_to_psv",
+    "ingest_input_table_pipeline2",
+]

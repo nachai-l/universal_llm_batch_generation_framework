@@ -1,85 +1,23 @@
-# functions/utils/config.py
 """
-Config Loader — Job Posting DQ Project (Typed YAML Configs)
+Config Loader — Universal LLM Batch Generation Framework (Typed YAML Configs)
 
 Intent
-- Load + validate YAML configuration files for the Job Posting DQ project:
+- Load + validate universal YAML configuration files:
   - configs/parameters.yaml
-  - configs/prompt.yaml (single system prompt string; supports key variants)
-  - configs/prompts.yaml (optional legacy prompt-key map for runner)
   - configs/credentials.yaml
-- Return **typed** configuration objects (Pydantic) aligned with this repo.
-- Provide backward-compatible parsing for a small set of legacy keys.
-- Ensure output/cache/report directories exist.
+- Return typed configuration objects (Pydantic v2) aligned with the universal framework.
 
 What this module guarantees
-- **Strict validation:** invalid configs fail fast with actionable Pydantic errors.
-- **Unicode whitespace hardening:** NBSP/BOM/narrow NBSP are normalized before YAML parsing.
-- **Backwards compatibility (limited, intentional):**
-  - `input` -> `inputs` remap (singular -> plural)
-  - `llm.max_rows_per_run` accepts: null / "all" / int / numeric string
-- **Deterministic defaults:** if a key is omitted, model defaults apply.
+- Strict validation: invalid configs fail fast with actionable Pydantic errors.
+- Unicode whitespace hardening BEFORE YAML parse: NBSP/BOM/narrow NBSP normalized.
+- Minimal filesystem setup via ensure_dirs() for cache / outputs / reports / logs / schema archive.
 
-Config models (high level)
-- ProjectConfig:
-  - name (default "job_posting_dq")
-  - timezone (default "Asia/Bangkok")
-
-- InputsConfig:
-  - raw_postings_csv, raw_jds_csv, raw_skills_csv
-  - processed_postings_psv, processed_raw_psv, processed_skills_psv
-
-- LLMConfig:
-  - model_name (default "gemini-2.5-flash")
-  - temperature (0.0–2.0)
-  - progress_log_every (>0)
-  - max_workers (>0)
-  - silence_client_lv_logs (bool)
-  - json_only (bool), max_retries (>0)
-  - max_rows_per_run (Optional[int], supports "all" and <=0 => run all)
-  - force (bool)
-
-- OutputsConfig:
-  - artifacts_dir, cache_dir, reports_dir
-  - pipeline outputs paths (jsonl/csv)
-
-- ParametersConfig:
-  - groups: project, inputs, llm, outputs
-  - prompt_key (default "job_posting_dq_eval_v1")
-
-Credentials models
-- CredentialsGeminiRequest: timeout and retry backoff knobs
-- CredentialsGemini: api_key_env + optional project/location + request block
-- CredentialsConfig: gemini section
-
-Primary functions
-- load_parameters(path="configs/parameters.yaml") -> ParametersConfig
-- load_prompt(path="configs/prompt.yaml") -> str
-  - expects YAML key: "System Prompt" (preferred) or "system_prompt"
-  - NOTE: docstring mentions a typo "configs/prmpt.yaml" — code expects "configs/prompt.yaml"
-- load_prompts(path="configs/prompts.yaml") -> dict[str, str]
-  - expects structure:
-      meta: {...}
-      prompts: {prompt_key: "template", ...}
-- load_credentials(path="configs/credentials.yaml") -> CredentialsConfig
-- ensure_dirs(params) -> None
-  - creates: artifacts_dir, cache_dir, reports_dir, plus process_data/raw_data
-
-Implementation notes / gotchas
-- `_load_yaml()` enforces that YAML root is a mapping/object; otherwise raises.
-- `load_prompts()` is “legacy”: it requires `meta` and `prompts` mappings (strict).
-- `OutputsConfig` default output paths currently use:
-  - "artifacts/job_postings_dq_eval.jsonl"
-  - "artifacts/job_postings_dq_eval.csv"
-  but Pipeline 1 defaults mention `artifacts/reports/...` — make sure these are aligned
-  (either adjust defaults here or in the pipeline’s output resolution logic).
-
-External dependencies
-- PyYAML: yaml.safe_load
-- Pydantic v2: BaseModel, validators, model_validate
-- Local: functions.utils.logging.get_logger
+Forward compatibility
+- Accepts older configs that used:
+  - llm_schema.path (maps to py_path)
+  - cache.artifact_dir (maps to cache.dir)
+  - missing context/artifacts/run blocks
 """
-
 
 from __future__ import annotations
 
@@ -93,47 +31,137 @@ from functions.utils.logging import get_logger
 
 
 # -----------------------------
-# Parameter models (THIS project)
+# Parameter models (Universal)
 # -----------------------------
-class ProjectConfig(BaseModel):
-    name: str = "job_posting_dq"
-    timezone: str = "Asia/Bangkok"
+
+InputFormat = Literal["csv", "tsv", "psv", "xlsx"]
+GroupingMode = Literal["group_output", "row_output_with_group_context"]
+
+ContextColumnsMode = Literal["all", "include", "exclude"]
+KVOrder = Literal["input_order", "alpha"]
+
+OutputFormat = Literal["psv", "jsonl"]
 
 
-class InputsConfig(BaseModel):
-    # raw sources
-    raw_postings_csv: str = "raw_data/Thailand_global_postings.csv"
-    raw_jds_csv: str = "raw_data/Thailand_global_raw.csv"
-    raw_skills_csv: str = "raw_data/Thailand_global_skills.csv"
+class RunConfig(BaseModel):
+    name: str = "universal_llm_batch_gen_framework"
+    timezone: str = "Asia/Tokyo"
+    log_level: str = "INFO"
+    log_file: Optional[str] = None
+    run_id: Optional[str] = None
 
-    # processed outputs (psv)
-    processed_postings_psv: str = "process_data/Thailand_global_postings.psv"
-    processed_raw_psv: str = "process_data/Thailand_global_raw.psv"
-    processed_skills_psv: str = "process_data/Thailand_global_skills.psv"
+
+class InputConfig(BaseModel):
+    path: str = "raw_data/input.csv"
+    format: InputFormat = "csv"
+    encoding: str = "utf-8"
+    sheet: Optional[str] = None  # for xlsx only
+    required_columns: Optional[list[str]] = None
+
+
+class GroupingConfig(BaseModel):
+    enabled: bool = False
+    column: Optional[str] = None
+    mode: GroupingMode = "group_output"
+    max_rows_per_group: int = 50
+
+    @field_validator("max_rows_per_group")
+    @classmethod
+    def _validate_max_rows_per_group(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("grouping.max_rows_per_group must be > 0")
+        return v
+
+
+class ContextColumnsConfig(BaseModel):
+    mode: ContextColumnsMode = "all"
+    include: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=list)
+
+
+class ContextConfig(BaseModel):
+    """
+    Context construction controls for LLM generation.
+
+    Used by functions/core/context_builder.py
+    """
+    columns: ContextColumnsConfig = Field(default_factory=ContextColumnsConfig)
+
+    row_template: str = "{__ROW_KV_BLOCK__}"
+    auto_kv_block: bool = True
+    kv_order: KVOrder = "input_order"
+
+    max_context_chars: int = 12000
+    truncate_field_chars: int = 2000
+
+    group_header_template: Optional[str] = None
+    group_footer_template: Optional[str] = None
+
+    @field_validator("max_context_chars", "truncate_field_chars")
+    @classmethod
+    def _validate_nonnegative_int(cls, v: int, info) -> int:
+        if v < 0:
+            raise ValueError(f"context.{info.field_name} must be >= 0")
+        return v
+
+
+class GenerationPromptConfig(BaseModel):
+    path: str = "prompts/generation.yaml"
+
+
+class JudgePromptConfig(BaseModel):
+    enabled: bool = False
+    path: str = "prompts/judge.yaml"
+
+
+class SchemaAutoPyPromptConfig(BaseModel):
+    path: str = "prompts/schema_auto_py_generation.yaml"
+
+
+class SchemaAutoJsonPromptConfig(BaseModel):
+    path: str = "prompts/schema_auto_json_summarization.yaml"
+
+
+class PromptsConfig(BaseModel):
+    generation: GenerationPromptConfig = Field(default_factory=GenerationPromptConfig)
+    judge: JudgePromptConfig = Field(default_factory=JudgePromptConfig)
+    schema_auto_py_generation: SchemaAutoPyPromptConfig = Field(default_factory=SchemaAutoPyPromptConfig)
+    schema_auto_json_summarization: SchemaAutoJsonPromptConfig = Field(default_factory=SchemaAutoJsonPromptConfig)
+
+
+class SchemaConfig(BaseModel):
+    """
+    Current (preferred):
+      - py_path
+      - txt_path
+
+    Backward compatibility:
+      - path -> py_path
+    """
+    py_path: str = "schema/llm_schema.py"
+    txt_path: str = "schema/llm_schema.txt"
+    auto_generate: bool = True
+    force_regenerate: bool = False
+    archive_dir: str = "archived/"
+
+    # Back-compat input field (optional)
+    path: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _apply_backcompat(self) -> "SchemaConfig":
+        if (not self.py_path or self.py_path == "schema/llm_schema.py") and self.path:
+            # If older config provided `path`, use it as py_path
+            self.py_path = self.path
+        return self
 
 
 class LLMConfig(BaseModel):
-    model_name: str = "gemini-2.5-flash"
-    temperature: float = 0.3
-
-    # progress logging control
-    progress_log_every: int = 100
-
-    # Concurrency
-    max_workers: int = 4
-
-    # silence Gemini SDK logs
-    silence_client_lv_logs: bool = False
-
-    # Strict JSON-only requirement
-    json_only: bool = True
+    model_name: str = "gemini-3-flash-preview"
+    temperature: float = 1.0
     max_retries: int = 3
-
-    # Optional: row limit (None means "all")
-    max_rows_per_run: Optional[int] = None
-
-    # Optional: pipeline default force (can still be overridden by pipeline arg)
-    force: bool = False
+    timeout_sec: int = 60
+    max_workers: int = 10
+    silence_client_lv_logs: bool = True
 
     @field_validator("temperature")
     @classmethod
@@ -142,100 +170,98 @@ class LLMConfig(BaseModel):
             raise ValueError("llm.temperature must be within [0.0, 2.0]")
         return v
 
-    @field_validator("max_workers", "max_retries")
+    @field_validator("max_retries", "timeout_sec", "max_workers")
     @classmethod
     def _validate_positive_int(cls, v: int, info) -> int:
         if v <= 0:
             raise ValueError(f"llm.{info.field_name} must be > 0")
         return v
 
-    @field_validator("progress_log_every", mode="before")
+
+class CacheConfig(BaseModel):
+    """
+    Current (preferred):
+      - dir
+
+    Backward compatibility:
+      - artifact_dir -> dir
+    """
+    enabled: bool = True
+    force: bool = False
+    dir: str = "artifacts/cache"
+    dump_failures: bool = True
+    verbose: int = 0  # NEW: pipeline verbosity (0..10)
+
+    # Back-compat input field (optional)
+    artifact_dir: Optional[str] = None
+
+    @field_validator("verbose")
     @classmethod
-    def _validate_progress_log_every(cls, v: Any) -> int:
-        if v is None:
-            return 100
-        try:
-            iv = int(v)
-        except Exception as e:
-            raise ValueError("llm.progress_log_every must be an integer") from e
-        if iv <= 0:
-            raise ValueError("llm.progress_log_every must be > 0")
-        return iv
+    def _validate_verbose(cls, v: int) -> int:
+        if v < 0 or v > 10:
+            raise ValueError("cache.verbose must be within [0, 10]")
+        return v
 
-    @field_validator("max_rows_per_run", mode="before")
-    @classmethod
-    def _validate_max_rows_per_run(cls, v: Any) -> Optional[int]:
-        """
-        Accept:
-        - null / None -> None (meaning: run all)
-        - "all" -> None
-        - int -> int (<=0 treated as all)
-        - "10" -> 10 (<=0 treated as all)
-        """
-        if v is None:
-            return None
+    @model_validator(mode="after")
+    def _apply_backcompat(self) -> "CacheConfig":
+        if self.artifact_dir and (not self.dir or self.dir == "artifacts/cache"):
+            self.dir = self.artifact_dir
+        return self
 
-        if isinstance(v, str):
-            s = v.strip().lower()
-            if s == "all":
-                return None
-            try:
-                iv = int(s)
-            except Exception as e:
-                raise ValueError('llm.max_rows_per_run must be "all", null, or an integer') from e
-            return None if iv <= 0 else iv
-
-        if isinstance(v, int):
-            return None if v <= 0 else v
-
-        raise ValueError('llm.max_rows_per_run must be "all", null, or an integer')
+class ArtifactsConfig(BaseModel):
+    dir: str = "artifacts"
+    outputs_dir: str = "artifacts/outputs"
+    reports_dir: str = "artifacts/reports"
+    logs_dir: str = "artifacts/logs"
 
 
 class OutputsConfig(BaseModel):
-    artifacts_dir: str = "artifacts"
-    cache_dir: str = "artifacts/cache"
-    reports_dir: str = "artifacts/reports"
+    formats: list[OutputFormat] = Field(default_factory=lambda: ["psv", "jsonl"])
+    psv_path: str = "artifacts/outputs/output.psv"
+    jsonl_path: str = "artifacts/outputs/output.jsonl"
 
-    # pipeline outputs
-    job_postings_dq_eval_jsonl: str = "artifacts/job_postings_dq_eval.jsonl"
-    job_postings_dq_eval_csv: str = "artifacts/job_postings_dq_eval.csv"
+    @field_validator("formats")
+    @classmethod
+    def _validate_formats_nonempty(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("outputs.formats must contain at least one format (psv/jsonl)")
+        return v
+
+
+class ReportConfig(BaseModel):
+    enabled: bool = True
+    md_path: str = "artifacts/reports/report.md"
+    html_path: str = "artifacts/reports/report.html"
 
 
 class ParametersConfig(BaseModel):
-    project: ProjectConfig = Field(default_factory=ProjectConfig)
-    inputs: InputsConfig = Field(default_factory=InputsConfig)
+    run: RunConfig = Field(default_factory=RunConfig)
+
+    input: InputConfig = Field(default_factory=InputConfig)
+    grouping: GroupingConfig = Field(default_factory=GroupingConfig)
+    context: ContextConfig = Field(default_factory=ContextConfig)
+
+    prompts: PromptsConfig = Field(default_factory=PromptsConfig)
+    llm_schema: SchemaConfig = Field(default_factory=SchemaConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    cache: CacheConfig = Field(default_factory=CacheConfig)
+
+    artifacts: ArtifactsConfig = Field(default_factory=ArtifactsConfig)
     outputs: OutputsConfig = Field(default_factory=OutputsConfig)
+    report: ReportConfig = Field(default_factory=ReportConfig)
 
-    # Optional: prompt key name for runner
-    prompt_key: str = "job_posting_dq_eval_v1"
-
-    @model_validator(mode="before")
+    @field_validator("grouping")
     @classmethod
-    def _backward_compat_keys(cls, data: Any) -> Any:
-        """
-        Backward compatibility:
-        - allow older config to use top-level 'input' (singular) instead of 'inputs'
-        - allow older config to set outputs under 'artifact_folder' or 'artifact_dir' (best-effort)
-        """
-        if not isinstance(data, dict):
-            return data
-
-        if "inputs" not in data and "input" in data and isinstance(data["input"], dict):
-            data["inputs"] = data.pop("input")
-
-        # Try mapping legacy artifact_folder if present
-        llm = data.get("llm")
-        if isinstance(llm, dict):
-            # ignore unknown keys safely; we don't validate artifact_folder in llm
-            pass
-
-        return data
+    def _validate_grouping_block(cls, g: GroupingConfig) -> GroupingConfig:
+        if g.enabled and (g.column is None or not str(g.column).strip()):
+            raise ValueError("grouping.column is required when grouping.enabled=true")
+        return g
 
 
 # -----------------------------
-# Credentials models (same as before)
+# Credentials models
 # -----------------------------
+
 class CredentialsGeminiRequest(BaseModel):
     timeout_seconds: int = 60
     retry_backoff_seconds: int = 2
@@ -244,6 +270,7 @@ class CredentialsGeminiRequest(BaseModel):
 
 class CredentialsGemini(BaseModel):
     api_key_env: str = "GEMINI_API_KEY"
+    model_name: Optional[str] = None
     gcp_project_id: Optional[str] = None
     gcp_location: Optional[str] = None
     request: CredentialsGeminiRequest = Field(default_factory=CredentialsGeminiRequest)
@@ -256,116 +283,82 @@ class CredentialsConfig(BaseModel):
 # -----------------------------
 # YAML helpers
 # -----------------------------
-def _load_yaml(path: str) -> Dict[str, Any]:
+
+_BAD_WHITESPACE = ["\u00A0", "\u2007", "\u202F", "\uFEFF"]
+
+
+def _load_yaml(path: str | Path) -> Dict[str, Any]:
     p = Path(path)
     if not p.exists():
-        raise FileNotFoundError(f"YAML file not found: {path}")
+        raise FileNotFoundError(f"YAML file not found: {str(path)}")
 
-    with p.open("r", encoding="utf-8") as f:
-        text = f.read()
+    raw = p.read_text(encoding="utf-8")
 
     # sanitize BEFORE YAML parse (fix NBSP / BOM / narrow NBSP)
-    for ch in ["\u00A0", "\u2007", "\u202F", "\uFEFF"]:
-        text = text.replace(ch, " ")
+    for ch in _BAD_WHITESPACE:
+        raw = raw.replace(ch, " ")
 
-    data = yaml.safe_load(text) or {}
+    data = yaml.safe_load(raw) or {}
     if not isinstance(data, dict):
-        raise ValueError(f"YAML root must be a mapping/object: {path}")
+        raise ValueError(f"YAML root must be a mapping/object: {str(path)}")
     return data
 
 
-
-def load_parameters(path: str = "configs/parameters.yaml") -> ParametersConfig:
-    """
-    Load and validate parameters.yaml into a typed ParametersConfig (job posting DQ).
-    """
+def load_parameters(path: str | Path = "configs/parameters.yaml") -> ParametersConfig:
     logger = get_logger(__name__)
     raw = _load_yaml(path)
     try:
-        params = ParametersConfig.model_validate(raw)
+        return ParametersConfig.model_validate(raw)
     except ValidationError as e:
         logger.error("Invalid parameters.yaml: %s", e)
         raise
-    return params
 
 
-def load_prompt(path: str = "configs/prompt.yaml") -> str:
-    """
-    Load single prompt file (your current file is configs/prmpt.yaml - typo).
-    Expected YAML:
-      System Prompt: |
-        ...
-    Returns the system prompt string.
-    """
-    raw = _load_yaml(path)
-    # Support either "System Prompt" or "system_prompt" keys
-    v = raw.get("System Prompt", None)
-    if v is None:
-        v = raw.get("system_prompt", None)
-    if not isinstance(v, str) or not v.strip():
-        raise ValueError(f"{path} must contain a non-empty 'System Prompt' string")
-    return v
-
-
-def load_prompts(path: str = "configs/prompts.yaml") -> Dict[str, str]:
-    """
-    Optional legacy support: prompts.yaml with meta + prompts mapping.
-    (Kept for compatibility with runner patterns that expect a prompt_key -> template map.)
-    """
-    raw = _load_yaml(path)
-
-    meta = raw.get("meta")
-    prompts = raw.get("prompts")
-
-    if meta is None or not isinstance(meta, dict):
-        raise ValueError("prompts.yaml missing required 'meta' mapping")
-    if prompts is None or not isinstance(prompts, dict):
-        raise ValueError("prompts.yaml missing required 'prompts' mapping")
-
-    out: Dict[str, str] = {}
-    for k, v in prompts.items():
-        if not isinstance(k, str) or not isinstance(v, str):
-            raise ValueError(f"prompts.yaml prompts must be string->string; got {type(k)}->{type(v)} for key={k}")
-        out[k] = v
-
-    return out
-
-
-def load_credentials(path: str = "configs/credentials.yaml") -> CredentialsConfig:
-    """
-    Load and validate credentials.yaml into a typed CredentialsConfig.
-    """
+def load_credentials(path: str | Path = "configs/credentials.yaml") -> CredentialsConfig:
     logger = get_logger(__name__)
     raw = _load_yaml(path)
     try:
-        creds = CredentialsConfig.model_validate(raw)
+        return CredentialsConfig.model_validate(raw)
     except ValidationError as e:
         logger.error("Invalid credentials.yaml: %s", e)
         raise
-    return creds
 
 
 def ensure_dirs(params: ParametersConfig) -> None:
     """
     Ensure configured output directories exist.
+
+    Creates:
+    - cache.dir
+    - artifacts.outputs_dir / artifacts.reports_dir / artifacts.logs_dir
+    - parent dir for outputs.psv_path and outputs.jsonl_path
+    - report output directories
+    - llm_schema.archive_dir
+    - parent dir for llm_schema.py_path and llm_schema.txt_path
     """
     dirs = [
-        params.outputs.artifacts_dir,
-        params.outputs.cache_dir,
-        params.outputs.reports_dir,
-        "process_data",
-        "raw_data",
+        params.cache.dir,
+        params.artifacts.outputs_dir,
+        params.artifacts.reports_dir,
+        params.artifacts.logs_dir,
+        str(Path(params.outputs.psv_path).parent),
+        str(Path(params.outputs.jsonl_path).parent),
+        str(Path(params.report.md_path).parent),
+        str(Path(params.report.html_path).parent),
+        params.llm_schema.archive_dir,
+        str(Path(params.llm_schema.py_path).parent),
+        str(Path(params.llm_schema.txt_path).parent),
     ]
+
     for d in dirs:
-        Path(d).mkdir(parents=True, exist_ok=True)
+        if d:
+            Path(d).mkdir(parents=True, exist_ok=True)
 
 
 __all__ = [
     "ParametersConfig",
     "CredentialsConfig",
     "load_parameters",
-    "load_prompt",
-    "load_prompts",
     "load_credentials",
     "ensure_dirs",
 ]

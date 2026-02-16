@@ -1,18 +1,154 @@
 # configs/parameters.yaml
-llm:
-  model_name: "gemini-3-flash-preview" # gemini-3-pro-preview / gemini-3-flash-preview / gemini-2.5-flash
-  temperature: 1.0 # Recommended 1.0, for Gemini 3 to avoid degradation, otherwise 0.3
-  progress_log_every: 1000
-  max_rows_per_run: 20001  # or 10 / 50 / 20001 / 'all' 
+# ============================================================
+# Universal LLM Batch Generation & Validation Framework
+# ============================================================
 
-  # Concurrency for LLM calls (simple thread pool / async batching later)
+run:
+  name: universal_llm_batch_gen_framework
+  timezone: Asia/Tokyo
+  log_level: INFO
+  log_file: null
+  run_id: null
+
+# ------------------------------------------------------------
+# Input table configuration (Pipeline 2)
+# ------------------------------------------------------------
+input:
+  path: raw_data/input.csv
+  format: csv                       # csv | psv | tsv | xlsx
+  encoding: utf-8
+  sheet: null
+
+  # Optional: validate these columns exist (exact match after header trimming).
+  # If null/empty -> no required-column validation.
+  required_columns: null            # e.g. ["Role Track Example Name", "Question ID"]
+
+
+# ------------------------------------------------------------
+# Row grouping (Pipelines 3–4)
+# ------------------------------------------------------------
+grouping:
+  # If false: process each input row independently (1 row -> 1 output).
+  # If true: group rows by `column` and build context per group.
+  enabled: true
+
+  # Column name used to form groups (exact match after header trimming).
+  # Required when enabled=true.
+  # Examples:
+  # - "Role Track Example Name" (group all questions by role)
+  # - "Course Code" (group CLOs by course)
+  column: "Role Track Example Name"
+
+  # How outputs are produced when grouping is enabled:
+  # - group_output:
+  #     1 group -> 1 LLM call -> 1 output record (aggregated result per group)
+  # - row_output_with_group_context:
+  #     1 group -> build shared group context
+  #     then run per-row outputs, each row gets the group context included
+  #     (useful when you want per-row answers but need group info)
+  mode: row_output_with_group_context            # group_output | row_output_with_group_context
+
+  # Safety/size guardrail: cap how many rows from each group are included in the context.
+  # If a group has more rows than this, we truncate deterministically (stable ordering).
+  max_rows_per_group: 50
+
+# ------------------------------------------------------------
+# Context construction / rendering (Pipelines 3–4)
+# ------------------------------------------------------------
+context:
+  # Column selection strategy for building {context}
+  columns:
+    mode: all                       # all | include | exclude
+    include: []                     # used only when mode=include
+    exclude: []                     # used only when mode=exclude
+
+  # How each row is rendered into context.
+  # If you want generic formatting, keep it like below.
+  # If you want domain-specific formatting, override per task.
+  row_template: |
+    {__ROW_KV_BLOCK__}
+
+  # If true, context builder will generate {__ROW_KV_BLOCK__} as:
+  # "col1: value\ncol2: value\n..."
+  # using selected columns (after include/exclude).
+  auto_kv_block: true
+
+  # Ordering of columns in KV block:
+  # - "input_order": use df.columns order
+  # - "alpha": sort column names
+  kv_order: input_order
+
+  # Safety knobs
+  max_context_chars: 12000
+  truncate_field_chars: 2000
+
+  # Optional: add group header/footer wrappers (nice for grouped runs)
+  group_header_template: null       # e.g. "Group {group_key} ({n_rows} rows)\n"
+  group_footer_template: null
+
+# ------------------------------------------------------------
+# Prompt configuration (Pipelines 0–1–4)
+# ------------------------------------------------------------
+prompts:
+  generation:
+    path: prompts/generation.yaml
+
+  judge:
+    enabled: true
+    path: prompts/judge.yaml
+
+  schema_auto_py_generation:
+    path: prompts/schema_auto_py_generation.yaml
+
+  schema_auto_json_summarization:
+    path: prompts/schema_auto_json_summarization.yaml
+
+# ------------------------------------------------------------
+# Output schema configuration (Pipelines 0–1)
+# ------------------------------------------------------------
+llm_schema:
+  py_path: schema/llm_schema.py
+  txt_path: schema/llm_schema.txt
+  auto_generate: true
+  force_regenerate: true
+  archive_dir: archived/
+
+# ------------------------------------------------------------
+# LLM execution settings (Pipeline 4)
+# ------------------------------------------------------------
+llm:
+  model_name: gemini-3-flash-preview
+  temperature: 1.0
+  max_retries: 3
+  timeout_sec: 60
   max_workers: 10
   silence_client_lv_logs: true
 
-  # Location to store LLM artifacts to be used instead of LLM call when force is not set to true
-  force: true
-  artifact_folder: "artifacts/"
+# ------------------------------------------------------------
+# Deterministic caching (Pipeline 4)
+# ------------------------------------------------------------
+cache:
+  enabled: true
+  force: false
+  dir: artifacts/cache
+  dump_failures: true
+  verbose: 3
+
+# ------------------------------------------------------------
+# Artifacts / outputs (Pipelines 2, 5, 6)
+# ------------------------------------------------------------
+artifacts:
+  dir: artifacts
+  outputs_dir: artifacts/outputs
+  reports_dir: artifacts/reports
+  logs_dir: artifacts/logs
 
 outputs:
-  job_postings_dq_eval_csv: "artifacts/reports/job_postings_dq_eval.csv"
-  job_postings_dq_eval_jsonl: "artifacts/reports/job_postings_dq_eval.jsonl"
+  formats: [psv, jsonl]
+  psv_path: artifacts/outputs/output.psv
+  jsonl_path: artifacts/outputs/output.jsonl
+
+report:
+  enabled: true
+  md_path: artifacts/reports/report.md
+  html_path: artifacts/reports/report.html

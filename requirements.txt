@@ -23,3 +23,4 @@ pytest-mock>=3.12
 
 tabulate>=0.9
 markdown==3.10
+openpyxl==3.1.5

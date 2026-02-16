@@ -1,0 +1,82 @@
+{
+  "models": {
+    "JudgeResult": {
+      "additionalProperties": false,
+      "description": "Schema for the judge LLM output when evaluating responses.",
+      "properties": {
+        "reasons": {
+          "description": "A list of specific reasons or justifications for the score and verdict.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "score": {
+          "description": "A numerical score between 0 and 100.",
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Score",
+          "type": "integer"
+        },
+        "verdict": {
+          "description": "The final pass or fail judgment based on evaluation criteria.",
+          "enum": [
+            "PASS",
+            "FAIL"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "verdict",
+        "score"
+      ],
+      "title": "JudgeResult",
+      "type": "object"
+    },
+    "LLMOutput": {
+      "additionalProperties": false,
+      "description": "Schema for the generated interview question and example answers.\nUsed for strict validation of LLM generation output.",
+      "properties": {
+        "example_answer_bad": {
+          "description": "A low-quality (3 or less) vague or off-topic answer.",
+          "title": "Example Answer Bad",
+          "type": "string"
+        },
+        "example_answer_good": {
+          "description": "A high-quality (7-10) structured and relevant answer for a junior candidate.",
+          "title": "Example Answer Good",
+          "type": "string"
+        },
+        "example_answer_mid": {
+          "description": "A medium-quality (4-6) generic answer that lacks specificity or depth.",
+          "title": "Example Answer Mid",
+          "type": "string"
+        },
+        "grading_rubrics": {
+          "description": "Concise rubric sections including Good, To avoid, and Red Flag criteria.",
+          "title": "Grading Rubrics",
+          "type": "string"
+        },
+        "question_name": {
+          "description": "A clear, realistic interview question aligned with the role and level.",
+          "title": "Question Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question_name",
+        "example_answer_good",
+        "example_answer_mid",
+        "example_answer_bad",
+        "grading_rubrics"
+      ],
+      "title": "LLMOutput",
+      "type": "object"
+    }
+  },
+  "title": "LLM Schema",
+  "type": "object"
+}

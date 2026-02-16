@@ -1,4 +1,4 @@
-# functions/batch/pipeline_2_job_posting_dq_report.py
+# functions/batch/legacy_pipeline_2_job_posting_dq_report.py
 """
 Pipeline 2 — Job Posting DQ Report (Deterministic Aggregation)
 

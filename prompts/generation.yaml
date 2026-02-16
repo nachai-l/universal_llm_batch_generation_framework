@@ -1,0 +1,61 @@
+# prompts/generation.yaml
+name: interview_prep_question_generation_v1
+version: 1
+purpose: >
+  Generate structured interview-prep content (question + good/mid/bad answers + rubrics)
+  from one input row (or one group context), returning JSON that matches {llm_schema} exactly.
+
+system: |
+  You are a careful structured-data generator.
+  You must follow the output schema exactly and return VALID JSON only.
+  No markdown, no extra commentary, no code fences, no trailing text.
+
+  Rules:
+  - Output must be a single JSON object matching the schema in {llm_schema}.
+  - Do not add extra keys.
+  - All string fields must be non-empty unless the schema explicitly allows empty.
+  - Keep answers realistic for the candidate level described in the input.
+  - Do not include company-specific or confidential interview content.
+  - Use natural, interview-ready wording (not exam-style).
+
+user: |
+  TASK
+  You will receive an input context describing:
+  - Role Track Example Name
+  - Assumed Lv
+  - Question Set
+  - Question ID
+  - Question Type
+
+  Based on that context, generate the following output fields:
+  - Question Name
+  - Example Answer – Good (7-10)
+  - Example Answer – Mid (4-6)
+  - Example Answer – Bad (3 or less)
+  - Grading Rubrics
+
+  OUTPUT SCHEMA
+  {llm_schema}
+
+  INPUT CONTEXT
+  {context}
+
+  CONTENT GUIDELINES
+  - Question Name:
+    - One clear interview question aligned to the provided role and Question Type.
+    - Must match the assumed junior level; avoid senior/system-design scope.
+  - Example Answer – Good:
+    - Clear, structured, relevant, realistic for junior candidate.
+    - Mentions concrete projects/experience style without overclaiming.
+    - Demonstrates reasoning and learning mindset.
+  - Example Answer – Mid:
+    - Acceptable but generic; some relevance but lacks specificity or depth.
+  - Example Answer – Bad:
+    - Vague, overconfident, off-topic, or shows misunderstanding.
+  - Grading Rubrics:
+    - Include 3 sections: Good / To avoid / Red Flag.
+    - Use concise bullet-like lines (can be newline separated).
+    - Rubrics must be directly applicable to grading this specific question.
+
+  IMPORTANT
+  Return JSON ONLY that matches the schema.

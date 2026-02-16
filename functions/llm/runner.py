@@ -1,48 +1,29 @@
 # functions/llm/runner.py
 """
-Gemini Prompt Runner (JSON-only + Schema Validation + Cache)
+Gemini Prompt Runner (File-based YAML Prompt + JSON-only + Schema Validation + Cache)
 
 Intent
-- Provide one high-level entrypoint to run a prompt by `prompt_key` with variables,
+- Provide one high-level entrypoint to run a prompt YAML file with variables,
   call Gemini, and return **validated JSON** as a Pydantic model.
-- Make LLM execution predictable and pipeline-friendly by enforcing:
-  - JSON extraction (even if the model adds fences or trailing text)
-  - schema validation (Pydantic)
-  - bounded retries with corrective instructions
-  - deterministic, caller-supplied caching via `cache_id`
-  - optional failure dumps for debugging
 
-What this module guarantees
-- **Return type safety:** `run_prompt_json()` returns a `BaseModel` instance validated
-  against the provided `schema_model`.
-- **JSON-only enforcement:** model output is parsed to the first JSON object/array;
-  markdown/code fences and trailing junk are ignored.
-- **Stable caching semantics:**
-  - HIT: cached payload exists and validates against schema
-  - STALE: cached payload exists but fails schema validation → re-call Gemini
-  - MISS: no cache file found
-  - FORCE: cache read bypassed via `force=True`
-- **Debuggability:** if enabled, invalid model outputs are saved under
-  `artifacts/cache/_failures/` so you can inspect failures without re-running.
+This runner enforces:
+- JSON extraction (even if the model adds fences or trailing text)
+- schema validation (Pydantic)
+- bounded retries with corrective instructions
+- deterministic, caller-supplied caching via `cache_id`
+- optional failure dumps for debugging
 
-Dependencies
-- Prompt rendering:
-  - `functions.llm.prompts.load_prompt_templates()`
-  - `functions.llm.prompts.render_prompt()`
-- Validation:
-  - Pydantic `BaseModel` / `ValidationError`
-- Gemini SDK:
-  - `client.models.generate_content(...)` (via `google.genai` client instance passed in)
+Prompt format
+- Loaded from a YAML file (e.g. prompts/generation.yaml) using functions.llm.prompts:
+  - load_prompt_file(path)
+  - render_prompt_blocks(prompt_dict, variables)
+- Placeholders are rendered using str.format(**variables), e.g. {context}, {llm_schema}.
 
-Key functions
-- `run_prompt_json(...) -> BaseModel`
-  Renders prompt from `configs/prompts.yaml`, runs Gemini, extracts JSON,
-  validates the payload, and optionally caches the validated payload.
-
-Supporting utilities (internal)
-- `_extract_json(text)`: strip fences and decode the first JSON value
-- `_auto cache`: `_try_read_cache()` / `_write_cache()` with filesystem-safe cache ids
-- `_write_failure_dump()`: best-effort raw output dump for invalid attempts
+Caching semantics
+- HIT: cached payload exists and validates against schema
+- STALE: cached payload exists but fails schema validation -> re-call Gemini
+- MISS: no cache found
+- FORCE: bypass cache read via force=True
 """
 
 from __future__ import annotations
@@ -55,7 +36,7 @@ from typing import Any, Dict, Optional, Type, Tuple
 
 from pydantic import BaseModel, ValidationError
 
-from functions.llm.prompts import load_prompt_templates, render_prompt
+from functions.llm.prompts import load_prompt_file, render_prompt_blocks
 from functions.utils.logging import get_logger
 
 
@@ -64,9 +45,7 @@ _CODE_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", flags=re.DOTALL | re.
 
 
 def _sanitize_cache_id(cache_id: str) -> str:
-    """
-    Make cache_id filesystem-safe without hashing.
-    """
+    """Make cache_id filesystem-safe without hashing."""
     s = cache_id.strip().replace("/", "_").replace("\\", "_")
     s = re.sub(r"\s+", "_", s)
     s = re.sub(r"[^A-Za-z0-9._-]", "_", s)
@@ -96,34 +75,60 @@ def _write_cache(cache_dir: str | Path, cache_id: str, payload: dict) -> None:
     p.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
 
 
+def _cache_path_text(cache_dir: str | Path, cache_id: str) -> Path:
+    cid = _sanitize_cache_id(cache_id)
+    return Path(cache_dir) / f"{cid}.txt"
+
+
+def _try_read_cache_text(cache_dir: str | Path, cache_id: Optional[str]) -> Optional[str]:
+    if not cache_id:
+        return None
+    p = _cache_path_text(cache_dir, cache_id)
+    if not p.exists():
+        return None
+    try:
+        return p.read_text(encoding="utf-8")
+    except Exception:
+        return None
+
+
+def _write_cache_text(cache_dir: str | Path, cache_id: str, text: str) -> None:
+    p = _cache_path_text(cache_dir, cache_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+
+
+def _sanitize_for_filename(s: str) -> str:
+    s = s.strip().replace("/", "_").replace("\\", "_")
+    s = re.sub(r"\s+", "_", s)
+    s = re.sub(r"[^A-Za-z0-9._-]", "_", s)
+    return s[:160]
+
+
 def _write_failure_dump(
     cache_dir: str | Path,
     cache_id: Optional[str],
-    prompt_key: str,
+    prompt_path: str,
     attempt: int,
     out_text: str,
 ) -> None:
     """
     Best-effort: write raw model output for debugging when JSON parsing/validation fails.
-    This helps you inspect what the model actually returned without re-running.
     """
     try:
         root = Path(cache_dir) / "_failures"
         root.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         cid = _sanitize_cache_id(cache_id or "no_cache_id")
-        p = root / f"{cid}__{prompt_key}__a{attempt}__{ts}.txt"
-        p.write_text(out_text, encoding="utf-8")
+        ptag = _sanitize_for_filename(Path(prompt_path).name)
+        p = root / f"{cid}__{ptag}__a{attempt}__{ts}.txt"
+        p.write_text(out_text or "", encoding="utf-8")
     except Exception:
-        # Never fail the pipeline due to debug logging
         return
 
 
 def _strip_code_fences(text: str) -> str:
-    """
-    If response is wrapped in markdown code fences, extract inner content.
-    If multiple fences exist, prefer the first.
-    """
+    """If response is wrapped in markdown code fences, extract inner content."""
     m = _CODE_FENCE_RE.search(text)
     if m:
         inner = m.group(1)
@@ -136,13 +141,10 @@ def _raw_decode_first_json(text: str) -> Tuple[Any, int]:
     """
     Robustly parse the first JSON value from a string using json.JSONDecoder.raw_decode().
 
-    - Finds the first '{' or '[' and attempts to raw_decode from there.
-    - Returns (obj, end_idx) where end_idx is relative to the substring passed to raw_decode.
-
-    Raises ValueError / JSONDecodeError on failure.
+    Finds the first '{' or '[' and decodes from there, ignoring trailing junk.
     """
     s = text.lstrip("\ufeff \t\r\n")  # handle BOM + whitespace
-    # locate first plausible JSON start
+
     i_obj = s.find("{")
     i_arr = s.find("[")
     if i_obj == -1 and i_arr == -1:
@@ -164,23 +166,20 @@ def _extract_json(text: str) -> Any:
     1) Strip code fences if present (```json ... ```).
     2) Try json.loads(full_text).
     3) Fallback: raw_decode the FIRST JSON object/array and ignore trailing text.
-       This fixes "Extra data" and most "JSON + commentary" outputs.
     """
     t = _strip_code_fences(text)
 
-    # Fast path: pure JSON
     try:
         return json.loads(t)
     except Exception:
         pass
 
-    # Robust path: decode first JSON and ignore trailing junk
     obj, _end = _raw_decode_first_json(t)
     return obj
 
 
 def _corrective_prefix(error_msg: str) -> str:
-    # Keep short to avoid bloating tokens
+    """Short corrective prefix to improve retries without bloating tokens."""
     return (
         "CRITICAL: Your previous output was invalid.\n"
         "You MUST output valid JSON only with the exact required schema.\n"
@@ -197,7 +196,7 @@ def _call_gemini_text(
 ) -> str:
     """
     Call google.genai client and return response text.
-    This function is isolated for test mocking.
+    Isolated for test mocking.
     """
     resp = client.models.generate_content(
         model=model_name,
@@ -205,11 +204,9 @@ def _call_gemini_text(
         config={"temperature": temperature},
     )
 
-    # Be defensive across versions
     if hasattr(resp, "text") and isinstance(resp.text, str) and resp.text.strip():
         return resp.text
 
-    # Fallback: try candidates
     if hasattr(resp, "candidates") and resp.candidates:
         cand0 = resp.candidates[0]
         if hasattr(cand0, "content") and cand0.content:
@@ -218,39 +215,29 @@ def _call_gemini_text(
     return str(resp)
 
 
-def run_prompt_json(
-    prompt_key: str,
+def run_prompt_yaml_json(
+    prompt_path: str | Path,
     variables: Dict[str, Any],
     schema_model: Type[BaseModel],
     client_ctx: Dict[str, Any],
     *,
-    prompts_path: str = "configs/prompts.yaml",
     temperature: float = 0.3,
     max_retries: int = 3,
-    json_only: bool = True,  # kept for compatibility; extraction always expects JSON
     cache_dir: str | Path = "artifacts/cache",
     cache_id: Optional[str] = None,
-    force: bool = False,            # bypass cache read
-    write_cache: bool = True,       # allow disabling cache write
-    dump_failures: bool = True,     # NEW: write raw bad outputs to artifacts/cache/_failures
+    force: bool = False,        # bypass cache read
+    write_cache: bool = True,   # allow disabling cache write
+    dump_failures: bool = True, # write raw outputs to artifacts/cache/_failures
 ) -> BaseModel:
     """
-    Render prompt, call Gemini, parse JSON, validate against schema_model, return parsed BaseModel.
-
-    Caching:
-    - If cache_id is provided and force=False:
-        - try to read artifacts/cache/<cache_id>.json first.
-        - if valid, returns cached parsed schema_model (cache=HIT).
-        - if exists but invalid for schema, ignore and re-call (cache=STALE).
-        - if not exists, cache=MISS.
-    - If force=True:
-        - skip cache read (cache=FORCE) and always call model.
-    - After a successful call, writes validated JSON payload to cache (if write_cache=True).
+    Load prompt YAML from file, render with variables, call Gemini,
+    extract JSON, validate against schema_model, and optionally cache.
 
     Notes:
     - No hashing is used; cache_id must be deterministic and provided by caller.
     """
     logger = get_logger(__name__)
+    prompt_path = str(prompt_path)
 
     cache_path: Optional[Path] = _cache_path(cache_dir, cache_id) if cache_id else None
 
@@ -260,21 +247,18 @@ def run_prompt_json(
         if cached is not None:
             try:
                 parsed = schema_model.model_validate(cached)
-                logger.debug("LLM cache=HIT | %s | prompt_key=%s", str(cache_path), prompt_key)
+                logger.debug("LLM cache=HIT | %s | prompt=%s", str(cache_path), prompt_path)
                 return parsed
             except ValidationError:
-                logger.debug("LLM cache=STALE | %s | prompt_key=%s", str(cache_path), prompt_key)
+                logger.debug("LLM cache=STALE | %s | prompt=%s", str(cache_path), prompt_path)
         else:
-            logger.debug("LLM cache=MISS | %s | prompt_key=%s", str(cache_path), prompt_key)
+            logger.debug("LLM cache=MISS | %s | prompt=%s", str(cache_path), prompt_path)
     elif cache_id and force:
-        logger.debug("LLM cache=FORCE | %s | prompt_key=%s", str(cache_path), prompt_key)
+        logger.debug("LLM cache=FORCE | %s | prompt=%s", str(cache_path), prompt_path)
 
-    prompts = load_prompt_templates(prompts_path)
-    if prompt_key not in prompts:
-        raise KeyError(f"Unknown prompt_key: {prompt_key}")
-
-    template = prompts[prompt_key]
-    prompt = render_prompt(template, variables)
+    # 2) load + render prompt (file-based)
+    prompt_dict = load_prompt_file(prompt_path)
+    prompt = render_prompt_blocks(prompt_dict, variables)
 
     client = client_ctx["client"]
     model_name = client_ctx["model_name"]
@@ -290,12 +274,9 @@ def run_prompt_json(
                 temperature=temperature,
             )
 
-            # We always expect JSON payload
             payload = _extract_json(out_text)
-
             parsed = schema_model.model_validate(payload)
 
-            # cache write
             if cache_id and write_cache:
                 _write_cache(cache_dir, cache_id, payload)
 
@@ -309,16 +290,123 @@ def run_prompt_json(
                 _write_failure_dump(
                     cache_dir=cache_dir,
                     cache_id=cache_id,
-                    prompt_key=prompt_key,
+                    prompt_path=prompt_path,
                     attempt=attempt,
                     out_text=out_text if "out_text" in locals() else "",
                 )
 
-            # retry with corrective prefix
             prompt = _corrective_prefix(str(e)) + prompt
             continue
 
     raise RuntimeError(f"Failed to produce valid JSON after {max_retries} attempts: {last_err}")
 
 
-__all__ = ["run_prompt_json"]
+def run_prompt_yaml_text(
+    prompt_path: str | Path,
+    variables: Dict[str, Any],
+    client_ctx: Dict[str, Any],
+    *,
+    temperature: float = 0.3,
+    max_retries: int = 3,
+    cache_dir: str | Path = "artifacts/cache",
+    cache_id: Optional[str] = None,
+    force: bool = False,
+    write_cache: bool = True,
+    dump_failures: bool = True,
+    strip_code_fences: bool = True,
+    min_chars: int = 1,
+    must_contain: Optional[list[str]] = None,
+) -> str:
+    """
+    Run a YAML prompt file and return plain text output.
+
+    Use for:
+    - schema/llm_schema.py generation (python code)
+    - llm_schema.txt summarization (schema contract)
+
+    Light validation:
+    - min_chars: output length must be >= min_chars after trimming
+    - must_contain: all substrings must appear in output (case-sensitive)
+    """
+    logger = get_logger(__name__)
+    prompt_path = str(prompt_path)
+
+    cache_path_txt: Optional[Path] = _cache_path_text(cache_dir, cache_id) if cache_id else None
+
+    # cache read (unless forced)
+    if cache_id and not force:
+        cached = _try_read_cache_text(cache_dir, cache_id)
+        if cached is not None:
+            out = cached
+            out2 = _strip_code_fences(out) if strip_code_fences else out
+            out2 = out2.strip()
+
+            ok = len(out2) >= max(min_chars, 0)
+            if ok and must_contain:
+                ok = all(s in out2 for s in must_contain)
+
+            if ok:
+                logger.debug("LLM cache=HIT | %s | prompt=%s", str(cache_path_txt), prompt_path)
+                return out2
+
+            logger.debug("LLM cache=STALE | %s | prompt=%s", str(cache_path_txt), prompt_path)
+
+        else:
+            logger.debug("LLM cache=MISS | %s | prompt=%s", str(cache_path_txt), prompt_path)
+    elif cache_id and force:
+        logger.debug("LLM cache=FORCE | %s | prompt=%s", str(cache_path_txt), prompt_path)
+
+    prompt_dict = load_prompt_file(prompt_path)
+    prompt = render_prompt_blocks(prompt_dict, variables)
+
+    client = client_ctx["client"]
+    model_name = client_ctx["model_name"]
+
+    last_err: Optional[Exception] = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            out_text = _call_gemini_text(
+                client=client,
+                model_name=model_name,
+                prompt=prompt,
+                temperature=temperature,
+            )
+
+            out = _strip_code_fences(out_text) if strip_code_fences else out_text
+            out = out.strip()
+
+            if len(out) < max(min_chars, 0):
+                raise ValueError(f"Text output too short (len={len(out)} < {min_chars})")
+
+            if must_contain:
+                missing = [s for s in must_contain if s not in out]
+                if missing:
+                    raise ValueError(f"Text output missing required substrings: {missing}")
+
+            if cache_id and write_cache:
+                _write_cache_text(cache_dir, cache_id, out)
+
+            return out
+
+        except Exception as e:
+            last_err = e
+            logger.warning("LLM text output invalid (attempt %d/%d): %s", attempt, max_retries, str(e))
+
+            if dump_failures:
+                _write_failure_dump(
+                    cache_dir=cache_dir,
+                    cache_id=cache_id,
+                    prompt_path=prompt_path,
+                    attempt=attempt,
+                    out_text=out_text if "out_text" in locals() else "",
+                )
+
+            # Same corrective prefix (still helpful for non-JSON outputs)
+            prompt = _corrective_prefix(str(e)) + prompt
+            continue
+
+    raise RuntimeError(f"Failed to produce valid text after {max_retries} attempts: {last_err}")
+
+
+__all__ = ["run_prompt_yaml_json", "run_prompt_yaml_text"]

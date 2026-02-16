@@ -17,37 +17,24 @@ What this module guarantees
   - Installs handler-level filters on root handlers (backstop),
   - Installs a root-logger filter (extra safety when propagation behaves unexpectedly).
 
-Key concepts
-- Root handlers carry formatting and filtering (modules should not attach handlers).
-- `RunIdFilter` injects `record.run_id` for correlation (pipelines can attach per logger).
-- `NoisyLibFilter` drops INFO/DEBUG logs for known noisy namespaces while always allowing WARNING+.
+Integration with parameters.yaml
+- This module does NOT read YAML directly (kept reusable & testable).
+- Pipelines should load `configs/parameters.yaml` and call:
+    configure_logging_from_params(params, level="INFO", log_file=None)
+  which applies:
+    params.llm.silence_client_lv_logs
 
 Primary API
-- `configure_logging(level="INFO", log_file=None, silence_client_lv_logs=False) -> None`
-  Configures root logging once and can be safely re-called to:
-  - add a file handler
-  - toggle client log silencing
-  - refresh filters on newly added handlers
-
-- `get_logger(name: str, run_id: str | None = None) -> logging.Logger`
-  Returns a module logger and (optionally) attaches a `RunIdFilter` for correlation.
-  Lazily configures logging with defaults if not configured yet.
-
-Operational notes
-- `_NOISY_PREFIXES` is intentionally conservative; only add namespaces that are consistently noisy.
-- When `silence_client_lv_logs=True`, noisy loggers are disabled and their handlers removed.
-  Filters remain installed as a safety net for newly created child loggers.
-
-External dependencies
-- Python stdlib: `logging`, `pathlib`
+- configure_logging(level="INFO", log_file=None, silence_client_lv_logs=False) -> None
+- configure_logging_from_params(params, level="INFO", log_file=None) -> None
+- get_logger(name, run_id=None) -> logging.Logger
 """
-
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 _DEFAULT_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 _DEFAULT_DATEFMT = "%Y-%m-%d %H:%M:%S"
@@ -58,20 +45,21 @@ _CURRENT_LOG_FILE: Optional[str] = None
 _SILENCE_CLIENT_LV_LOGS: Optional[bool] = None  # None = never set explicitly
 
 
-# Expand this list to cover real logger namespaces seen in the wild.
-# Keep it conservative: only add namespaces that are truly noisy for INFO/DEBUG.
+# Keep this conservative and specific.
+# Avoid disabling overly-broad namespaces like "google" which can hide useful warnings.
 _NOISY_PREFIXES = [
-    # http stack
+    # HTTP stacks
     "httpx",
     "httpcore",
     "hpack",
     "h2",
-    # google genai SDK
+    # Gemini SDK / genai libs (actual namespaces may vary by version)
     "google_genai",
     "google_genai.models",
-    # google client libraries often used under the hood
-    "google",
+    # Commonly noisy lower-level Google transport layers (keep narrow)
     "google.api_core",
+    "google.auth",
+    "googleapiclient",
 ]
 
 
@@ -215,6 +203,7 @@ def configure_logging(
 ) -> None:
     """
     Configure root logging (idempotent for handlers).
+
     - Avoids handler duplication across repeated imports / calls.
     - If log_file is provided, adds a FileHandler in addition to StreamHandler.
     - Applies client-level log silencing based on silence_client_lv_logs.
@@ -276,17 +265,44 @@ def configure_logging(
     _CONFIGURED = True
 
 
+def configure_logging_from_params(
+    params: Any,
+    *,
+    level: str = "INFO",
+    log_file: Optional[str] = None,
+) -> None:
+    """
+    Convenience helper to integrate with configs/parameters.yaml without reading YAML here.
+
+    Expected params shape:
+      params.llm.silence_client_lv_logs: bool (optional; defaults to False)
+
+    Usage (in pipelines):
+      params = load_parameters(...)
+      configure_logging_from_params(params, level="INFO")
+    """
+    silence = False
+    try:
+        silence = bool(getattr(getattr(params, "llm", None), "silence_client_lv_logs", False))
+    except Exception:
+        silence = False
+
+    configure_logging(level=level, log_file=log_file, silence_client_lv_logs=silence)
+
+
 def get_logger(name: str, run_id: Optional[str] = None) -> logging.Logger:
     """
     Get a module logger with consistent configuration.
 
     Notes:
     - We configure logging lazily with INFO level by default, unless configured already.
+    - Pipelines SHOULD call configure_logging_from_params(params, ...) early to apply config.
     - We avoid adding per-logger handlers (handlers live on root).
     - If run_id is provided, attach a filter to this logger (idempotent per run_id).
     """
     global _CONFIGURED
     if not _CONFIGURED:
+        # default fallback; real pipelines should override via configure_logging_from_params(...)
         configure_logging(level="INFO", log_file=None, silence_client_lv_logs=False)
 
     logger = logging.getLogger(name)
@@ -303,4 +319,10 @@ def get_logger(name: str, run_id: Optional[str] = None) -> logging.Logger:
     return logger
 
 
-__all__ = ["get_logger", "configure_logging", "RunIdFilter", "NoisyLibFilter"]
+__all__ = [
+    "get_logger",
+    "configure_logging",
+    "configure_logging_from_params",
+    "RunIdFilter",
+    "NoisyLibFilter",
+]
