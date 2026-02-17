@@ -1,0 +1,242 @@
+[
+  {
+    "context": "Assumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals - Has done projects or internships\nQuestion ID: 1\nQuestion Set: A\nQuestion Type: Generic\nRole Track Example Name: Data Scientist\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals - Has done projects or internships - Not expected to design systems end-to-end\nQuestion ID: 2\nQuestion Set: A\nQuestion Type: Personality\nRole Track Example Name: Data Scientist\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals - Has done projects or internships - Not expected to design systems end-to-end\nQuestion ID: 3\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Data Scientist\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals - Has done projects or internships - Not expected to design systems end-to-end\nQuestion ID: 4\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Data Scientist\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals - Has done projects or internships - Not expected to design systems end-to-end\nQuestion ID: 5\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Data Scientist\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals - Has done projects or internships - Not expected to design systems end-to-end\nQuestion ID: 6\nQuestion Set: B\nQuestion Type: Generic\nRole Track Example Name: Data Scientist\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals - Has done projects or internships - Not expected to design systems end-to-end\nQuestion ID: 7\nQuestion Set: B\nQuestion Type: Personality\nRole Track Example Name: Data Scientist\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals - Has done projects or internships - Not expected to design systems end-to-end\nQuestion ID: 8\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Data Scientist\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals - Has done projects or internships - Not expected to design systems end-to-end\nQuestion ID: 9\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Data Scientist\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals - Has done projects or internships - Not expected to design systems end-to-end\nQuestion ID: 10\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Data Scientist\n",
+    "group_context_id": "b8bdab2ee1bd5f607a1c2e703289ab4150d33034",
+    "group_key": "Data Scientist",
+    "meta": {
+      "context_truncation": {
+        "applied": false,
+        "final_len": 2509,
+        "max_chars": 12000,
+        "original_len": 2509
+      },
+      "group_key": "Data Scientist",
+      "grouping_column": "Role Track Example Name",
+      "raw_group_context_len": 2509,
+      "row_cap_applied": false,
+      "row_indices_all": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "row_indices_used": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "usable_columns": [
+        "Assumed Lv",
+        "Question ID",
+        "Question Set",
+        "Question Type",
+        "Role Track Example Name"
+      ]
+    }
+  },
+  {
+    "context": "Assumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals of data pipelines and databases - Has done projects or internships - Not expected to design large-scale systems end-to-end\"\nQuestion ID: 1\nQuestion Set: A\nQuestion Type: Generic\nRole Track Example Name: Data Engineer\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals of data pipelines and databases - Has done projects or internships - Not expected to design large-scale systems end-to-end\"\nQuestion ID: 2\nQuestion Set: A\nQuestion Type: Personality\nRole Track Example Name: Data Engineer\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals of data pipelines and databases - Has done projects or internships - Not expected to design large-scale systems end-to-end\"\nQuestion ID: 3\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Data Engineer\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals of data pipelines and databases - Has done projects or internships - Not expected to design large-scale systems end-to-end\"\nQuestion ID: 4\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Data Engineer\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals of data pipelines and databases - Has done projects or internships - Not expected to design large-scale systems end-to-end\"\nQuestion ID: 5\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Data Engineer\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals of data pipelines and databases - Has done projects or internships - Not expected to design large-scale systems end-to-end\"\nQuestion ID: 6\nQuestion Set: B\nQuestion Type: Generic\nRole Track Example Name: Data Engineer\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals of data pipelines and databases - Has done projects or internships - Not expected to design large-scale systems end-to-end\"\nQuestion ID: 7\nQuestion Set: B\nQuestion Type: Personality\nRole Track Example Name: Data Engineer\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals of data pipelines and databases - Has done projects or internships - Not expected to design large-scale systems end-to-end\"\nQuestion ID: 8\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Data Engineer\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals of data pipelines and databases - Has done projects or internships - Not expected to design large-scale systems end-to-end\"\nQuestion ID: 9\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Data Engineer\n\n\nAssumed Lv: Junior - 0 to 2 years experience / fresh grad - Knows fundamentals of data pipelines and databases - Has done projects or internships - Not expected to design large-scale systems end-to-end\"\nQuestion ID: 10\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Data Engineer\n",
+    "group_context_id": "4099436540d8f261b0999c5e42dc7fe62aa0ffda",
+    "group_key": "Data Engineer",
+    "meta": {
+      "context_truncation": {
+        "applied": false,
+        "final_len": 2993,
+        "max_chars": 12000,
+        "original_len": 2993
+      },
+      "group_key": "Data Engineer",
+      "grouping_column": "Role Track Example Name",
+      "raw_group_context_len": 2993,
+      "row_cap_applied": false,
+      "row_indices_all": [
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "row_indices_used": [
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "usable_columns": [
+        "Assumed Lv",
+        "Question ID",
+        "Question Set",
+        "Question Type",
+        "Role Track Example Name"
+      ]
+    }
+  },
+  {
+    "context": "Assumed Lv: Junior 0 to 2 years experience or fresh graduate Knows fundamentals of programming, data structures, and basic software development practices Has done projects or internships Not expected to design complex systems end-to-end\nQuestion ID: 1\nQuestion Set: A\nQuestion Type: Generic\nRole Track Example Name: Software Developer\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Knows fundamentals of programming, data structures, and basic software development practices Has done projects or internships Not expected to design complex systems end-to-end\nQuestion ID: 2\nQuestion Set: A\nQuestion Type: Personality\nRole Track Example Name: Software Developer\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Knows fundamentals of programming, data structures, and basic software development practices Has done projects or internships Not expected to design complex systems end-to-end\nQuestion ID: 3\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Software Developer\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Knows fundamentals of programming, data structures, and basic software development practices Has done projects or internships Not expected to design complex systems end-to-end\nQuestion ID: 4\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Software Developer\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Knows fundamentals of programming, data structures, and basic software development practices Has done projects or internships Not expected to design complex systems end-to-end\nQuestion ID: 5\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Software Developer\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Knows fundamentals of programming, data structures, and basic software development practices Has done projects or internships Not expected to design complex systems end-to-end\nQuestion ID: 6\nQuestion Set: B\nQuestion Type: Generic\nRole Track Example Name: Software Developer\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Knows fundamentals of programming, data structures, and basic software development practices Has done projects or internships Not expected to design complex systems end-to-end\nQuestion ID: 7\nQuestion Set: B\nQuestion Type: Personality\nRole Track Example Name: Software Developer\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Knows fundamentals of programming, data structures, and basic software development practices Has done projects or internships Not expected to design complex systems end-to-end\nQuestion ID: 8\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Software Developer\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Knows fundamentals of programming, data structures, and basic software development practices Has done projects or internships Not expected to design complex systems end-to-end\nQuestion ID: 9\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Software Developer\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Knows fundamentals of programming, data structures, and basic software development practices Has done projects or internships Not expected to design complex systems end-to-end\nQuestion ID: 10\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Software Developer\n",
+    "group_context_id": "d96459c24c1e48331ba51b174fb8bacfc1f3202c",
+    "group_key": "Software Developer",
+    "meta": {
+      "context_truncation": {
+        "applied": false,
+        "final_len": 3383,
+        "max_chars": 12000,
+        "original_len": 3383
+      },
+      "group_key": "Software Developer",
+      "grouping_column": "Role Track Example Name",
+      "raw_group_context_len": 3383,
+      "row_cap_applied": false,
+      "row_indices_all": [
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "row_indices_used": [
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "usable_columns": [
+        "Assumed Lv",
+        "Question ID",
+        "Question Set",
+        "Question Type",
+        "Role Track Example Name"
+      ]
+    }
+  },
+  {
+    "context": "Assumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic consulting concepts and problem-solving frameworks Has done case studies, internships, or project-based work Not expected to lead client engagements or design end-to-end strategies\nQuestion ID: 1\nQuestion Set: A\nQuestion Type: Generic\nRole Track Example Name: Consultant\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic consulting concepts and problem-solving frameworks Has done case studies, internships, or project-based work Not expected to lead client engagements or design end-to-end strategies\nQuestion ID: 2\nQuestion Set: A\nQuestion Type: Personality\nRole Track Example Name: Consultant\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic consulting concepts and problem-solving frameworks Has done case studies, internships, or project-based work Not expected to lead client engagements or design end-to-end strategies\nQuestion ID: 3\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Consultant\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic consulting concepts and problem-solving frameworks Has done case studies, internships, or project-based work Not expected to lead client engagements or design end-to-end strategies\nQuestion ID: 4\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Consultant\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic consulting concepts and problem-solving frameworks Has done case studies, internships, or project-based work Not expected to lead client engagements or design end-to-end strategies\nQuestion ID: 5\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Consultant\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic consulting concepts and problem-solving frameworks Has done case studies, internships, or project-based work Not expected to lead client engagements or design end-to-end strategies\nQuestion ID: 6\nQuestion Set: B\nQuestion Type: Generic\nRole Track Example Name: Consultant\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic consulting concepts and problem-solving frameworks Has done case studies, internships, or project-based work Not expected to lead client engagements or design end-to-end strategies\nQuestion ID: 7\nQuestion Set: B\nQuestion Type: Personality\nRole Track Example Name: Consultant\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic consulting concepts and problem-solving frameworks Has done case studies, internships, or project-based work Not expected to lead client engagements or design end-to-end strategies\nQuestion ID: 8\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Consultant\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic consulting concepts and problem-solving frameworks Has done case studies, internships, or project-based work Not expected to lead client engagements or design end-to-end strategies\nQuestion ID: 9\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Consultant\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic consulting concepts and problem-solving frameworks Has done case studies, internships, or project-based work Not expected to lead client engagements or design end-to-end strategies\nQuestion ID: 10\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Consultant\n",
+    "group_context_id": "db240e1ee7bb182dbed5d68d0fced5dcc85129d5",
+    "group_key": "Consultant",
+    "meta": {
+      "context_truncation": {
+        "applied": false,
+        "final_len": 3533,
+        "max_chars": 12000,
+        "original_len": 3533
+      },
+      "group_key": "Consultant",
+      "grouping_column": "Role Track Example Name",
+      "raw_group_context_len": 3533,
+      "row_cap_applied": false,
+      "row_indices_all": [
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39
+      ],
+      "row_indices_used": [
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39
+      ],
+      "usable_columns": [
+        "Assumed Lv",
+        "Question ID",
+        "Question Set",
+        "Question Type",
+        "Role Track Example Name"
+      ]
+    }
+  },
+  {
+    "context": "Assumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic product concepts such as user needs, requirements, and prioritization Has done projects, internships, or worked closely with developers or stakeholders Not expected to own product strategy or roadmap end-to-end\nQuestion ID: 1\nQuestion Set: A\nQuestion Type: Generic\nRole Track Example Name: Product Owner\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic product concepts such as user needs, requirements, and prioritization Has done projects, internships, or worked closely with developers or stakeholders Not expected to own product strategy or roadmap end-to-end\nQuestion ID: 2\nQuestion Set: A\nQuestion Type: Personality\nRole Track Example Name: Product Owner\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic product concepts such as user needs, requirements, and prioritization Has done projects, internships, or worked closely with developers or stakeholders Not expected to own product strategy or roadmap end-to-end\nQuestion ID: 3\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Product Owner\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic product concepts such as user needs, requirements, and prioritization Has done projects, internships, or worked closely with developers or stakeholders Not expected to own product strategy or roadmap end-to-end\nQuestion ID: 4\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Product Owner\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic product concepts such as user needs, requirements, and prioritization Has done projects, internships, or worked closely with developers or stakeholders Not expected to own product strategy or roadmap end-to-end\nQuestion ID: 5\nQuestion Set: A\nQuestion Type: Specific\nRole Track Example Name: Product Owner\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic product concepts such as user needs, requirements, and prioritization Has done projects, internships, or worked closely with developers or stakeholders Not expected to own product strategy or roadmap end-to-end\nQuestion ID: 6\nQuestion Set: B\nQuestion Type: Generic\nRole Track Example Name: Product Owner\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic product concepts such as user needs, requirements, and prioritization Has done projects, internships, or worked closely with developers or stakeholders Not expected to own product strategy or roadmap end-to-end\nQuestion ID: 7\nQuestion Set: B\nQuestion Type: Personality\nRole Track Example Name: Product Owner\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic product concepts such as user needs, requirements, and prioritization Has done projects, internships, or worked closely with developers or stakeholders Not expected to own product strategy or roadmap end-to-end\nQuestion ID: 8\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Product Owner\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic product concepts such as user needs, requirements, and prioritization Has done projects, internships, or worked closely with developers or stakeholders Not expected to own product strategy or roadmap end-to-end\nQuestion ID: 9\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Product Owner\n\n\nAssumed Lv: Junior 0 to 2 years experience or fresh graduate Understands basic product concepts such as user needs, requirements, and prioritization Has done projects, internships, or worked closely with developers or stakeholders Not expected to own product strategy or roadmap end-to-end\nQuestion ID: 10\nQuestion Set: B\nQuestion Type: Specific\nRole Track Example Name: Product Owner\n",
+    "group_context_id": "06372dadc5379d9baaf6aa7f2f4c756f69ac218d",
+    "group_key": "Product Owner",
+    "meta": {
+      "context_truncation": {
+        "applied": false,
+        "final_len": 3863,
+        "max_chars": 12000,
+        "original_len": 3863
+      },
+      "group_key": "Product Owner",
+      "grouping_column": "Role Track Example Name",
+      "raw_group_context_len": 3863,
+      "row_cap_applied": false,
+      "row_indices_all": [
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49
+      ],
+      "row_indices_used": [
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49
+      ],
+      "usable_columns": [
+        "Assumed Lv",
+        "Question ID",
+        "Question Set",
+        "Question Type",
+        "Role Track Example Name"
+      ]
+    }
+  }
+]

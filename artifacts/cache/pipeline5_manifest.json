@@ -1,0 +1,37 @@
+{
+  "counts": {
+    "n_expanded_rows": 50,
+    "n_exported_records": 50,
+    "n_group_context_missing": 0,
+    "n_group_context_row_indices_missing": 0,
+    "n_group_outputs_seen": 5,
+    "n_missing_output_file": 0,
+    "n_row_index_out_of_range": 0,
+    "n_row_outputs_seen": 0,
+    "n_selected_question_missing": 0,
+    "n_success_files": 5
+  },
+  "input": {
+    "input_columns": [
+      "Role Track Example Name",
+      "Assumed Lv",
+      "Question Set",
+      "Question ID",
+      "Question Type"
+    ]
+  },
+  "meta": {
+    "detected_mode": "row_output_expanded",
+    "drop_heavy_columns": true,
+    "generated_at_utc": "2026-02-17T08:51:57.549523Z",
+    "grouping_column": "Role Track Example Name",
+    "outputs_jsonl": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/artifacts/outputs/output.jsonl",
+    "outputs_psv": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/artifacts/outputs/output.psv",
+    "parameters_path": "configs/parameters.yaml",
+    "pipeline": 5,
+    "pipeline2_ingest_path": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/artifacts/cache/pipeline2_input.json",
+    "pipeline3_group_contexts_path": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/artifacts/cache/pipeline3_group_contexts.json",
+    "pipeline4_manifest_path": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/artifacts/cache/pipeline4_manifest.json",
+    "pipeline4_outputs_dir": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/artifacts/cache/llm_outputs"
+  }
+}

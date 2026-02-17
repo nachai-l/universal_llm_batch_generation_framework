@@ -1,0 +1,49 @@
+{
+  "counts": {
+    "n_cache_hit": 0,
+    "n_cache_skipped": 0,
+    "n_fail": 0,
+    "n_fresh_success": 5,
+    "n_success": 5,
+    "n_to_run": 5,
+    "n_total": 5
+  },
+  "meta": {
+    "cache_skips_observed": 0,
+    "cache_skips_pre_scan": 0,
+    "elapsed_sec": 279.64421,
+    "execution_mode": "parallel",
+    "generated_at_utc": "2026-02-17T08:51:57.014418Z",
+    "generation_prompt_path": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/prompts/generation.yaml",
+    "group_contexts_path": "artifacts/cache/pipeline3_group_contexts.json",
+    "judge_enabled": true,
+    "judge_prompt_path": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/prompts/judge.yaml",
+    "judge_prompt_sha": "7c8339a89f92017572f59f0088bdf4f7cfba7455",
+    "max_workers": 10,
+    "model_name": "gemini-3-flash-preview",
+    "parameters_path": "configs/parameters.yaml",
+    "pipeline": 4,
+    "progress_every_n": 10,
+    "prompt_sha": "9006ac250434f8b070eb697cac17d99c2c924beb",
+    "runner_cache_dir": null,
+    "runner_cache_enabled": false,
+    "schema_py_path": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/schema/llm_schema.py",
+    "schema_sha": "141fd265148be08c38e947e22a0f706eb9c20586",
+    "schema_txt_path": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/schema/llm_schema.txt",
+    "temperature": 1.0,
+    "verbose": 10,
+    "work_items_path": "artifacts/cache/pipeline3_work_items.json"
+  },
+  "outputs": {
+    "failure_files": [],
+    "failures_dir": "artifacts/cache/llm_failures",
+    "outputs_dir": "artifacts/cache/llm_outputs",
+    "success_files": [
+      "0b4471732f9f5de0b051495bf2cf44efc6772427.json",
+      "123ad85ce4f666421374706e9fcd74f7bf442219.json",
+      "44b8c373a7dbc86266b5fa5e8e1de2eb2c67b284.json",
+      "aeec4cab374f62bcc8bf259a42caa0d265999dfc.json",
+      "ce2225049a1ffffd3d786f1c48098fac50cce2a4.json"
+    ]
+  }
+}

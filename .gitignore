@@ -1,59 +1,92 @@
 # =========================
-# Jupyter / Python noise
+# Python noise
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+
+# =========================
+# Jupyter
 # =========================
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/
-__pycache__/
-*.py[cod]
 
 # =========================
 # OS / Editor
 # =========================
 .DS_Store
 Thumbs.db
+.venv/
+venv/
+.idea/
+.vscode/
 
 # =========================
 # Secrets (DO NOT COMMIT)
 # =========================
 .env
 .env.*
+configs/credentials.yaml
 configs/*secret*.yaml
 configs/*key*.yaml
 
 # =========================
-# Data & Artifacts (structure kept, contents ignored)
+# Raw data
+# =========================
+raw_data/*
+!raw_data/.gitkeep
+
+# =========================
+# Generated archives (timestamped schema copies)
+# =========================
+archived/*
+!archived/.gitkeep
+
+# =========================
+# Artifacts — LLM cache files
+# (keep folder structure, ignore contents)
 # =========================
 
-# Raw / processed data (keep folder via .gitkeep)
-raw_data/*
-process_data/*
-!raw_data/.gitkeep
-!process_data/.gitkeep
+# LLM success outputs (cache)
+artifacts/cache/llm_outputs/*
+!artifacts/cache/llm_outputs/.gitkeep
 
-# Generated artifacts
-artifacts/cache/*
+# LLM failure dumps
+artifacts/cache/llm_failures/*
+!artifacts/cache/llm_failures/.gitkeep
+
+# Pipeline manifests and intermediate JSON artifacts
+!artifacts/cache/*.json
+
+# =========================
+# Artifacts — outputs and reports
+# (generated on each run)
+# =========================
+artifacts/outputs/*
+!artifacts/outputs/.gitkeep
+
 artifacts/reports/*
-!artifacts/cache/.gitkeep
 !artifacts/reports/.gitkeep
 
 # =========================
-# Generated large files (pipeline outputs)
+# Dev logs (optional — remove ! to ignore)
 # =========================
-*.jsonl
-*.psv
-
-# CSVs are usually large outputs — ignore by default
-# (override explicitly if needed)
-*.csv
+# dev_progress_log/*
+# !dev_progress_log/.gitkeep
 
 # =========================
-# Allowlist (explicitly tracked)
+# Allowlist — tracked files
 # =========================
 
 # Versioned configs
 !configs/parameters.yaml
-!configs/prompts.yaml
-!configs/credentials.yaml
+
+# Schema files (generated but version-controlled as contract)
+# Remove these lines if you prefer to regenerate schema fresh on each clone
+!schema/llm_schema.py
+!schema/llm_schema.txt
 
 # Project essentials
 !requirements.txt
+!README.md
