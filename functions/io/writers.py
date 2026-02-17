@@ -8,7 +8,7 @@ Intent
   - JSON (readable, deterministic)
   - JSONL for record-level outputs (LLM results, bundles, traceability)
   - CSV for tabular metrics and reports
-- Centralize directory creation and logging for all write operations.
+  - DELIMITED for PSV/TSV exports (Pipeline 5)
 
 External calls
 - json.dumps
@@ -21,6 +21,8 @@ Primary functions
 - write_json(path, obj) -> None
 - write_jsonl(path, records) -> None
 - write_csv(path, df) -> None
+- write_delimited(path, df, sep="|") -> None
+- write_psv(path, df) -> None
 
 Key behaviors / guarantees
 - **Deterministic output**
@@ -34,7 +36,7 @@ Key behaviors / guarantees
     - UTF-8 encoding
     - sort_keys=True to ensure stable key ordering
     - ensure_ascii=False to preserve Unicode text
-  - CSV:
+  - CSV/DELIMITED:
     - UTF-8 encoding
     - index=False
     - Column order is exactly df.columns (caller-controlled)
@@ -49,7 +51,7 @@ Key behaviors / guarantees
     - file path
     - bytes written (JSON)
     - number of rows written (JSONL)
-    - number of rows/columns (CSV)
+    - number of rows/columns (CSV/DELIMITED)
 
 Design notes
 - Writers are intentionally *thin*:
@@ -138,13 +140,62 @@ def write_csv(path: str | Path, df: pd.DataFrame) -> None:
     - index=False
     - stable column order as df.columns
     """
+    return write_delimited(path, df, sep=",")
+
+
+def write_delimited(path: str | Path, df: pd.DataFrame, *, sep: str = "|") -> None:
+    """
+    Write DataFrame to a delimited text file deterministically (e.g., PSV/TSV):
+    - UTF-8
+    - index=False
+    - stable column order as df.columns
+    - Caller controls sep (default: '|')
+
+    Notes:
+    - We set lineterminator='\\n' for stable output across platforms.
+    - We explicitly control quoting/escaping so JSON-in-cells (e.g., judge_reasons_json)
+      stays readable and does NOT get double-quoted to ""..."" by pandas.
+    """
+    import csv  # local import to keep this function copy/paste-ready
+
     logger = get_logger(__name__)
     ensure_parent_dir(path)
 
     p = Path(path)
-    df.to_csv(p, index=False, encoding="utf-8")
 
-    logger.info("Wrote CSV: %s (rows=%d, cols=%d)", str(p), int(df.shape[0]), int(df.shape[1]))
+    # QUOTE_MINIMAL keeps output readable while preserving validity.
+    # escapechar + doublequote=False prevents pandas from doubling quotes inside JSON strings.
+    df.to_csv(
+        p,
+        index=False,
+        encoding="utf-8",
+        sep=sep,
+        lineterminator="\n",
+        quoting=csv.QUOTE_MINIMAL,
+        escapechar="\\",
+        doublequote=False,
+    )
+
+    logger.info(
+        "Wrote DELIMITED: %s (sep=%s rows=%d, cols=%d)",
+        str(p),
+        str(sep),
+        int(df.shape[0]),
+        int(df.shape[1]),
+    )
+
+def write_psv(path: str | Path, df: pd.DataFrame) -> None:
+    """
+    Convenience wrapper for PSV (pipe-separated values).
+    """
+    return write_delimited(path, df, sep="|")
 
 
-__all__ = ["ensure_parent_dir", "write_json", "write_jsonl", "write_csv"]
+__all__ = [
+    "ensure_parent_dir",
+    "write_json",
+    "write_jsonl",
+    "write_csv",
+    "write_delimited",
+    "write_psv",
+]

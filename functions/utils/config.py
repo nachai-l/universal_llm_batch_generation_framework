@@ -1,3 +1,4 @@
+# functions/utils/config.py
 """
 Config Loader — Universal LLM Batch Generation Framework (Typed YAML Configs)
 
@@ -208,6 +209,7 @@ class CacheConfig(BaseModel):
             self.dir = self.artifact_dir
         return self
 
+
 class ArtifactsConfig(BaseModel):
     dir: str = "artifacts"
     outputs_dir: str = "artifacts/outputs"
@@ -232,6 +234,29 @@ class ReportConfig(BaseModel):
     enabled: bool = True
     md_path: str = "artifacts/reports/report.md"
     html_path: str = "artifacts/reports/report.html"
+
+    # NEW (Pipeline 6 — generalized)
+    write_html: bool = True
+    sample_per_group: int = 2
+    include_full_examples: bool = False
+    max_reason_examples: int = 5
+
+    # Backward compatibility (old name)
+    sample_per_role: Optional[int] = None
+
+    @model_validator(mode="after")
+    def _apply_backcompat(self) -> "ReportConfig":
+        # If old config used sample_per_role, map it to sample_per_group
+        if self.sample_per_role is not None:
+            self.sample_per_group = self.sample_per_role
+        return self
+
+    @field_validator("sample_per_group", "max_reason_examples")
+    @classmethod
+    def _validate_nonnegative_int(cls, v: int, info) -> int:
+        if v < 0:
+            raise ValueError(f"report.{info.field_name} must be >= 0")
+        return v
 
 
 class ParametersConfig(BaseModel):

@@ -1,0 +1,91 @@
+name: structured_generation_template
+version: 1
+purpose: >
+  Generate structured outputs from input context.
+  Compatible with row-wise, group output, and row-output-with-group-context modes.
+
+system: |
+  HARD OUTPUT CONTRACT
+  - Output MUST be valid JSON matching {llm_schema} exactly.
+  - Return ONE JSON object only.
+  - No markdown.
+  - No commentary.
+  - No code fences.
+  - Do NOT echo the schema.
+  - Do NOT include fields not defined in the schema.
+  - All required fields must be present.
+  - All required string fields must be non-empty.
+
+  INTERNAL VALIDATION BEFORE RETURNING
+  - Verify schema structure matches exactly.
+  - Verify no extra keys exist anywhere.
+  - Verify all required fields are filled.
+  - Verify each item (if multiple) is distinct.
+  - If any check fails, revise internally before returning JSON.
+
+  IMPORTANT
+  - Do not output arrays at top-level.
+  - Do not explain reasoning.
+  - Do not include analysis.
+  - Output JSON only.
+
+user: |
+  TASK OVERVIEW
+  You are generating structured outputs based on the INPUT CONTEXT below.
+
+  The INPUT CONTEXT may contain:
+  - One row (row-wise mode)
+  - Multiple rows belonging to one group (group_output mode)
+  - One row with additional group context (row_output_with_group_context mode)
+
+  Carefully read the INPUT CONTEXT before generating.
+
+  ------------------------------------------------
+  GENERATION INSTRUCTIONS
+  ------------------------------------------------
+
+  1. Identify all required output items from the INPUT CONTEXT.
+  2. If multiple items are required:
+     - Ensure each item is DISTINCT.
+     - Avoid rewording the same idea.
+     - Ensure coverage diversity across items.
+  3. Align each output item strictly to relevant information in INPUT CONTEXT.
+  4. Do not invent identifiers not present in INPUT CONTEXT.
+
+  ------------------------------------------------
+  FIELD-LEVEL GUIDANCE
+  ------------------------------------------------
+
+  For each output item:
+
+  - id: Must match identifier found in INPUT CONTEXT exactly.
+  - title: Clear and specific. Not generic.
+  - description: Concrete and aligned to context.
+  - rubric (if applicable): Must follow required sub-structure.
+
+  Replace or expand these with task-specific rules.
+
+  ------------------------------------------------
+  QUALITY RULES
+  ------------------------------------------------
+
+  - No vague wording.
+  - No duplication across items.
+  - No placeholders.
+  - No empty strings.
+  - Maintain consistent formatting.
+
+  ------------------------------------------------
+  SCHEMA CONTRACT
+  ------------------------------------------------
+
+  {llm_schema}
+
+  ------------------------------------------------
+  INPUT CONTEXT
+  ------------------------------------------------
+
+  {context}
+
+  FINAL REMINDER:
+  Return exactly ONE JSON object matching the schema.

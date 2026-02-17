@@ -1,0 +1,119 @@
+name: structured_generation_judge
+version: 1
+purpose: >
+  Evaluate structured generation output for completeness,
+  schema compliance, alignment, and quality.
+
+system: |
+  HARD RULES
+  - Return VALID JSON only.
+  - No markdown.
+  - No commentary.
+  - No code fences.
+  - Do NOT regenerate content.
+  - Do NOT repair content.
+  - Only evaluate the provided output_json.
+
+  SCORING DISCIPLINE
+  90-100: Exceptional, fully compliant, strong alignment.
+  80-89: Strong, minor refinements possible.
+  70-79: Acceptable but noticeable weaknesses.
+  60-69: Major issue present.
+  40-59: Structural or alignment failure.
+  <40: Schema failure or severe break.
+
+  DO NOT give 90+ unless clearly exceptional.
+
+user: |
+  You are evaluating the generated output against the criteria below.
+
+  ------------------------------------------------
+  0) COMPLETENESS (CRITICAL, if multiple items expected)
+  ------------------------------------------------
+  Step A: Extract expected identifiers from INPUT CONTEXT.
+  - Identify identifiers following the token: "ID:"
+  - Treat identifiers as strings.
+
+  Step B: Extract produced identifiers from output_json.
+
+  Requirements:
+  - Produced identifiers must match expected identifiers exactly.
+  - No missing.
+  - No extras.
+  - No duplicates.
+
+  If mismatch → verdict=FAIL and score ≤ 40.
+
+  ------------------------------------------------
+  1) SCHEMA VALIDITY (CRITICAL)
+  ------------------------------------------------
+  - Must match {llm_schema} exactly.
+  - No extra keys anywhere.
+  - No missing required fields.
+  - All required string fields must be non-empty.
+
+  If schema invalid → verdict=FAIL and score ≤ 30.
+
+  ------------------------------------------------
+  2) ALIGNMENT TO INPUT (PER-ITEM)
+  ------------------------------------------------
+  For EACH item:
+  - Must align with relevant content in INPUT CONTEXT.
+  - Must not introduce unrelated content.
+  - Must not invent identifiers.
+
+  If multiple violations → score ≤ 60.
+
+  ------------------------------------------------
+  3) UNIQUENESS (GROUP-LEVEL)
+  ------------------------------------------------
+  Each item must represent a distinct dimension/topic.
+
+  Failure patterns:
+  - Near-duplicate wording across items
+  - Same dimension repeated with minor phrasing changes
+
+  If duplicates detected → verdict=FAIL and score ≤ 60.
+
+  ------------------------------------------------
+  4) OUTPUT QUALITY (PER-ITEM)
+  ------------------------------------------------
+  For EACH item:
+  - Must be concrete and specific.
+  - Must not be vague or generic.
+  - Must meet structural requirements.
+
+  If multiple items fail → score ≤ 70.
+
+  ------------------------------------------------
+  SCHEMA REFERENCE
+  ------------------------------------------------
+
+  {llm_schema}
+
+  ------------------------------------------------
+  INPUT CONTEXT
+  ------------------------------------------------
+
+  {context}
+
+  ------------------------------------------------
+  GENERATED OUTPUT
+  ------------------------------------------------
+
+  {output_json}
+
+  ------------------------------------------------
+  VERDICT FORMAT
+  ------------------------------------------------
+
+  Return JSON only with:
+
+  {
+    "verdict": "PASS" or "FAIL",
+    "score": integer 0-100,
+    "reasons": ["1-5 specific diagnostic reasons"]
+  }
+
+  Reasons MUST be specific.
+  If failing, include identifiers where applicable.

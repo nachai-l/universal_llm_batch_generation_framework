@@ -299,16 +299,25 @@ def _build_group_output_items(
         group_context_raw = "\n\n".join(rendered_rows)
         context, trunc_meta = _truncate_context(group_context_raw, max_context_chars)
 
-        work_id = _stable_id(
+        group_context_id = _stable_id(
             [
-                "group",
-                str(gk),
+                "group_context",
                 grouping_column,
+                str(gk),
                 ",".join(usable_columns),
                 group_context_raw,
                 str(truncate_field_chars),
                 str(max_context_chars),
                 str(max_rows_per_group),
+            ]
+        )
+
+        work_id = _stable_id(
+            [
+                "group_output",
+                grouping_column,
+                str(gk),
+                group_context_id,
             ]
         )
 
@@ -320,6 +329,7 @@ def _build_group_output_items(
                 context=context,
                 meta={
                     "mode": "group_output",
+                    "group_context_id": group_context_id,
                     "grouping_column": grouping_column,
                     "group_key": str(gk) if gk is not None and not _is_na(gk) else "",
                     "usable_columns": usable_columns,

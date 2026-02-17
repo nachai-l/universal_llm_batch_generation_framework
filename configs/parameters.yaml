@@ -46,7 +46,7 @@ grouping:
   #     1 group -> build shared group context
   #     then run per-row outputs, each row gets the group context included
   #     (useful when you want per-row answers but need group info)
-  mode: row_output_with_group_context            # group_output | row_output_with_group_context
+  mode: group_output # group_output | row_output_with_group_context
 
   # Safety/size guardrail: cap how many rows from each group are included in the context.
   # If a group has more rows than this, we truncate deterministically (stable ordering).
@@ -119,7 +119,7 @@ llm_schema:
 llm:
   model_name: gemini-3-flash-preview
   temperature: 1.0
-  max_retries: 3
+  max_retries: 5
   timeout_sec: 60
   max_workers: 10
   silence_client_lv_logs: true
@@ -132,7 +132,7 @@ cache:
   force: false
   dir: artifacts/cache
   dump_failures: true
-  verbose: 3
+  verbose: 10
 
 # ------------------------------------------------------------
 # Artifacts / outputs (Pipelines 2, 5, 6)
@@ -152,3 +152,7 @@ report:
   enabled: true
   md_path: artifacts/reports/report.md
   html_path: artifacts/reports/report.html
+  write_html: true
+  sample_per_group: 5
+  include_full_examples: false
+  max_reason_examples: 5

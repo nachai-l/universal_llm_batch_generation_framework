@@ -37,35 +37,64 @@ class GenerationResult:
 
 def _judge_pass_and_feedback(judge_obj: Any) -> Tuple[Optional[bool], str]:
     """
-    Interpret judge output flexibly (supports multiple field names).
+    Interpret judge output flexibly.
+
+    Supports:
+      - JudgeResult(verdict="PASS"/"FAIL", score=int, reasons=list[str])
+      - legacy boolean pass fields
+      - legacy feedback fields
+
     Returns:
       (passed_or_none, feedback_text)
     """
     passed: Optional[bool] = None
-    feedback: str = ""
+    feedback_parts: list[str] = []
 
-    # pass field variants
-    for key in ("pass", "passed", "is_pass", "ok", "success"):
-        if hasattr(judge_obj, key):
-            v = getattr(judge_obj, key)
-            if isinstance(v, bool):
-                passed = v
-                break
+    # --- Preferred: JudgeResult-style verdict ---
+    verdict = getattr(judge_obj, "verdict", None)
+    if isinstance(verdict, str) and verdict.strip():
+        v = verdict.strip().upper()
+        if v in ("PASS", "FAIL"):
+            passed = (v == "PASS")
 
-    # feedback field variants
-    for key in ("feedback", "reason", "message", "detail", "details"):
-        if hasattr(judge_obj, key):
-            v = getattr(judge_obj, key)
-            if isinstance(v, str) and v.strip():
-                feedback = v.strip()
-                break
+    score = getattr(judge_obj, "score", None)
+    if isinstance(score, int):
+        feedback_parts.append(f"Judge score: {score}/100")
 
+    reasons = getattr(judge_obj, "reasons", None)
+    if isinstance(reasons, list):
+        rs = [str(x).strip() for x in reasons if str(x).strip()]
+        if rs:
+            # keep deterministic ordering as returned
+            feedback_parts.append("Reasons:")
+            feedback_parts.extend([f"- {r}" for r in rs])
+
+    # --- Legacy boolean fields (fallback) ---
+    if passed is None:
+        for key in ("pass", "passed", "is_pass", "ok", "success"):
+            if hasattr(judge_obj, key):
+                v = getattr(judge_obj, key)
+                if isinstance(v, bool):
+                    passed = v
+                    break
+
+    # --- Legacy free-text feedback fields (fallback) ---
+    if len(feedback_parts) == 0:
+        for key in ("feedback", "reason", "message", "detail", "details"):
+            if hasattr(judge_obj, key):
+                v = getattr(judge_obj, key)
+                if isinstance(v, str) and v.strip():
+                    feedback_parts.append(v.strip())
+                    break
+
+    feedback = "\n".join(feedback_parts).strip()
     return passed, feedback
 
 
 def _append_judge_feedback(base_context: str, feedback: str) -> str:
-    fb = feedback or "(Judge failed without feedback.)"
-    return base_context + "\n\nJUDGE FEEDBACK (fix your output):\n" + fb + "\n"
+    fb = (feedback or "(Judge failed without feedback.)").strip()
+    return base_context + "\n\nJUDGE FEEDBACK (do NOT mention this section; fix your output):\n" + fb + "\n"
+
 
 
 def generate_with_optional_judge(
@@ -155,7 +184,10 @@ def generate_with_optional_judge(
             )
 
             passed, feedback = _judge_pass_and_feedback(j_obj)
-            is_pass = True if passed is None else bool(passed)
+            if passed is None:
+                passed = False
+                feedback = (feedback + "\n" if feedback else "") + "Judge output missing verdict/pass field."
+            is_pass = bool(passed)
 
             if is_pass:
                 return GenerationResult(
@@ -167,7 +199,7 @@ def generate_with_optional_judge(
                     last_error=None,
                 )
 
-            # judge failed -> retry with feedback appended (deterministic)
+            # judge failed -> retry with feedback appended (deterministic, bounded)
             augmented_context = _append_judge_feedback(context, feedback)
             last_error = f"Judge failed: {feedback or '(no feedback)'}"
 

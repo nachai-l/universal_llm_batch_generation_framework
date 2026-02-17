@@ -8,8 +8,8 @@ import pandas as pd
 import pytest
 
 from functions.core.context_builder import (
-    WorkItem,
     GroupContext,
+    WorkItem,
     build_work_items,
     build_work_items_and_group_contexts,
 )
@@ -155,6 +155,11 @@ def test_group_output_builds_one_item_per_group_in_input_order():
     assert items[0].row_index is None
     assert items[1].row_index is None
 
+    # ✅ NEW: group_output now carries a deterministic group_context_id
+    assert isinstance(items[0].meta.get("group_context_id"), str) and items[0].meta["group_context_id"]
+    assert isinstance(items[1].meta.get("group_context_id"), str) and items[1].meta["group_context_id"]
+    assert items[0].meta["group_context_id"] != items[1].meta["group_context_id"]
+
     # group context concatenates rows with blank lines
     assert "\n\n" in items[0].context
     assert "q: hello" in items[0].context
@@ -178,6 +183,9 @@ def test_group_output_respects_max_rows_per_group_cap():
     assert "q: world" not in a_ctx
     assert items[0].meta["row_cap_applied"] is True
     assert len(items[0].meta["row_indices_used"]) == 1
+
+    # ✅ NEW: still has group_context_id even when capped
+    assert isinstance(items[0].meta.get("group_context_id"), str) and items[0].meta["group_context_id"]
 
 
 def test_row_output_with_group_context_builds_one_item_per_row_with_group_context_legacy():
@@ -257,6 +265,57 @@ def test_group_context_id_is_deterministic_for_same_input():
     m1 = {g.group_key: g.group_context_id for g in gcs1}
     m2 = {g.group_key: g.group_context_id for g in gcs2}
     assert m1 == m2
+
+
+# ✅ NEW CASE 1: group_output group_context_id determinism (same df + same params)
+def test_group_output_group_context_id_is_deterministic_for_same_input():
+    df = _df_basic()
+    params = _params(
+        grouping_enabled=True,
+        grouping_column="group",
+        grouping_mode="group_output",
+        max_rows_per_group=50,
+    )
+
+    items1 = build_work_items(df, params)
+    items2 = build_work_items(df, params)
+
+    m1 = {it.group_key: it.meta.get("group_context_id") for it in items1}
+    m2 = {it.group_key: it.meta.get("group_context_id") for it in items2}
+    assert m1 == m2
+    assert set(m1.keys()) == {"A", "B"}
+    assert all(isinstance(v, str) and v for v in m1.values())
+
+
+# ✅ NEW CASE 2: group_output group_context_id changes when group context changes (cap affects context)
+def test_group_output_group_context_id_changes_when_max_rows_per_group_changes():
+    df = _df_basic()
+
+    params_full = _params(
+        grouping_enabled=True,
+        grouping_column="group",
+        grouping_mode="group_output",
+        max_rows_per_group=50,  # includes both A rows
+    )
+    params_capped = _params(
+        grouping_enabled=True,
+        grouping_column="group",
+        grouping_mode="group_output",
+        max_rows_per_group=1,  # only first A row
+    )
+
+    items_full = build_work_items(df, params_full)
+    items_capped = build_work_items(df, params_capped)
+
+    # Compare A only (B unchanged by cap in this dataset)
+    a_full = next(x for x in items_full if x.group_key == "A")
+    a_cap = next(x for x in items_capped if x.group_key == "A")
+
+    assert "q: world" in a_full.context
+    assert "q: world" not in a_cap.context
+
+    # If context changes, group_context_id should change
+    assert a_full.meta["group_context_id"] != a_cap.meta["group_context_id"]
 
 
 def test_grouping_enabled_missing_column_raises():

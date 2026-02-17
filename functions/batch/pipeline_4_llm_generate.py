@@ -156,14 +156,23 @@ def _resolve_context_for_item(item: WorkRef, gc_map: Dict[str, str]) -> str:
     if gid:
         ctx = gc_map.get(str(gid))
         if ctx is None:
-            raise RuntimeError(f"Missing group context id={gid} work_id={item.work_id}")
-        return ctx
+            raise RuntimeError(
+                f"Missing group context id={gid} work_id={item.work_id} group_key={getattr(item, 'group_key', None)}"
+            )
+        if not str(ctx).strip():
+            raise RuntimeError(
+                f"Empty group context id={gid} work_id={item.work_id} group_key={getattr(item, 'group_key', None)}"
+            )
+        return str(ctx)
 
     inline_ctx = getattr(item, "context", None)
-    if inline_ctx:
-        return str(inline_ctx)
+    if isinstance(inline_ctx, str) and inline_ctx.strip():
+        return inline_ctx
 
-    raise RuntimeError(f"WorkItem missing both group_context_id and inline context: work_id={item.work_id}")
+    raise RuntimeError(
+        "WorkItem missing both group_context_id and inline context: "
+        f"work_id={item.work_id} group_key={getattr(item, 'group_key', None)}"
+    )
 
 
 def _process_work_item(
@@ -672,8 +681,8 @@ def main(
         "outputs": {
             "outputs_dir": str(out_dir),
             "failures_dir": str(fail_dir),
-            "success_files": sorted([s for s in success_files if s]),
-            "failure_files": sorted([s for s in failure_files if s]),
+            "success_files": sorted(set([s for s in success_files if s])),
+            "failure_files": sorted(set([s for s in failure_files if s])),
         },
     }
     write_json(manifest_p, manifest)

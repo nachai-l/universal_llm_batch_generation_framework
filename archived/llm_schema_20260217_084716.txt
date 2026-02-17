@@ -2,10 +2,10 @@
   "models": {
     "JudgeResult": {
       "additionalProperties": false,
-      "description": "The result of an LLM-based evaluation or grading process.",
+      "description": "The schema for the evaluation output of the judge model.",
       "properties": {
         "reasons": {
-          "description": "A list of specific reasons or feedback points supporting the verdict.",
+          "description": "A list of specific reasons or feedback supporting the verdict.",
           "items": {
             "type": "string"
           },
@@ -13,14 +13,14 @@
           "type": "array"
         },
         "score": {
-          "description": "A numerical score between 0 and 100.",
+          "description": "The numerical quality score from 0 to 100.",
           "maximum": 100,
           "minimum": 0,
           "title": "Score",
           "type": "integer"
         },
         "verdict": {
-          "description": "The final pass or fail judgment.",
+          "description": "The final pass/fail decision for the generated content.",
           "enum": [
             "PASS",
             "FAIL"
@@ -40,42 +40,48 @@
       "$defs": {
         "QuestionItem": {
           "additionalProperties": false,
-          "description": "Represents a single interview question and its associated evaluation data.",
+          "description": "Represents a single generated interview question and its evaluation metadata.",
           "properties": {
             "example_answer_bad": {
-              "description": "A poor example response that demonstrates lack of skill or red flags.",
+              "description": "A poor example answer or one containing red flags.",
               "title": "Example Answer Bad",
               "type": "string"
             },
             "example_answer_good": {
-              "description": "A high-quality example response that meets all criteria.",
+              "description": "A high-quality example answer demonstrating desired competency.",
               "title": "Example Answer Good",
               "type": "string"
             },
             "example_answer_mid": {
-              "description": "A mediocre example response that is acceptable but lacking depth.",
+              "description": "An average example answer showing basic understanding but lacking depth.",
               "title": "Example Answer Mid",
               "type": "string"
             },
             "grading_rubrics": {
-              "description": "Structured rubrics containing 'Good:', 'To avoid:', and 'Red Flag:' sections.",
+              "description": "Detailed grading criteria with 'Good:', 'To avoid:', and 'Red Flag:' sections.",
               "title": "Grading Rubrics",
               "type": "string"
             },
             "question_id": {
-              "description": "The unique identifier for the question.",
+              "description": "The unique identifier for the question, preserved from the input context.",
               "title": "Question Id",
               "type": "string"
             },
             "question_name": {
-              "description": "The full interrogative sentence of the interview question.",
+              "description": "A short, descriptive title for the question topic.",
               "title": "Question Name",
+              "type": "string"
+            },
+            "question_text": {
+              "description": "The actual interrogative interview question. Must be at least 10 words and end with a question mark.",
+              "title": "Question Text",
               "type": "string"
             }
           },
           "required": [
             "question_id",
             "question_name",
+            "question_text",
             "example_answer_good",
             "example_answer_mid",
             "example_answer_bad",
@@ -86,10 +92,10 @@
         }
       },
       "additionalProperties": false,
-      "description": "The structured output containing the full set of generated interview questions.",
+      "description": "The root schema for the LLM's structured question generation response.",
       "properties": {
         "questions": {
-          "description": "A list of generated interview questions for the specified role.",
+          "description": "A list containing all generated questions for the specified role.",
           "items": {
             "$ref": "#/$defs/QuestionItem"
           },

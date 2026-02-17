@@ -50,19 +50,16 @@ _NULL_TOKENS = {
     "<na>",
 }
 
-
 def _normalize_cell(x: object) -> str:
     """
     Normalize a single cell to a cleaned string (PSV-friendly).
 
-    Rules (matches tests/test_ingestions.py):
-    - None / NaN -> ""
+    Rules (deterministic, traceability-safe):
+    - None / pandas NA -> ""
     - Trim outer whitespace
     - Replace CR/LF/TAB with single spaces (so each record stays one line in PSV)
-    - Normalize common null tokens (e.g., "NaN", "NULL", "n/a", "[None]") to ""
-    - Fix conservative escape artifacts:
-        - '\\,' -> ','
-        - remove stray backslashes: '\\' -> ''
+    - Normalize common null tokens (e.g., "NULL", "n/a", "[None]") to ""
+    - DO NOT strip backslashes globally (preserve original content)
     """
     if x is None:
         return ""
@@ -72,14 +69,14 @@ def _normalize_cell(x: object) -> str:
 
     s = str(x)
 
+    # Normalize line structure
     s = s.replace("\r\n", "\n").replace("\r", "\n").replace("\t", " ")
     s = s.replace("\n", " ")
 
-    s = s.replace("\\,", ",")
-    s = s.replace("\\", "")
-
+    # Normalize whitespace deterministically
     s = " ".join(s.split()).strip()
 
+    # Normalize null-like tokens (case-insensitive)
     if s.lower() in _NULL_TOKENS:
         return ""
 

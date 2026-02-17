@@ -57,4 +57,3 @@ artifacts/reports/*
 
 # Project essentials
 !requirements.txt
-!exploration.ipynb

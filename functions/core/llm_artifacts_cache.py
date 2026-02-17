@@ -1,3 +1,4 @@
+# functions/core/llm_artifacts_cache.py
 """
 Pipeline 4 Artifact Helpers (Pipeline3 adapters)
 
@@ -21,12 +22,17 @@ class WorkRef:
     group_key: str
     row_index: Optional[int]
     group_context_id: Optional[str]
+    context: Optional[str]
     meta: Dict[str, Any]
 
 
 def parse_pipeline3_items(obj: Dict[str, Any]) -> List[WorkRef]:
     """
     Parse pipeline3_work_items.json into a list of WorkRef.
+
+    Supported shapes (per-item):
+      - {"work_id": "...", "group_key": "...", "row_index": null|int, "group_context_id": "...", "context": "...", "meta": {...}}
+      - legacy/alt: group_context_id / group_key / context may be under meta
     """
     items = obj.get("items", [])
     if not isinstance(items, list):
@@ -43,15 +49,41 @@ def parse_pipeline3_items(obj: Dict[str, Any]) -> List[WorkRef]:
         group_context_id = it.get("group_context_id") or meta.get("group_context_id")
         group_key = it.get("group_key") or meta.get("group_key") or ""
 
+        # Inline context for non-dedup modes (e.g., group_output or row-wise inline)
+        # Prefer top-level; fall back to meta for forward compatibility.
+        inline_context = it.get("context")
+        if inline_context is None:
+            inline_context = meta.get("context")
+
+        # Normalize types
+        work_id = str(it.get("work_id", "") or "").strip()
+        if not work_id:
+            # Skip malformed entries rather than creating unusable WorkRefs
+            continue
+
+        row_index_val = it.get("row_index")
+        row_index = int(row_index_val) if row_index_val is not None else None
+
+        ctx: Optional[str] = None
+        if isinstance(inline_context, str) and inline_context.strip():
+            ctx = inline_context
+
+        gid: Optional[str] = None
+        if group_context_id:
+            gid_str = str(group_context_id).strip()
+            gid = gid_str if gid_str else None
+
         out.append(
             WorkRef(
-                work_id=str(it.get("work_id", "")),
+                work_id=work_id,
                 group_key=str(group_key or ""),
-                row_index=int(it["row_index"]) if it.get("row_index") is not None else None,
-                group_context_id=str(group_context_id) if group_context_id else None,
+                row_index=row_index,
+                group_context_id=gid,
+                context=ctx,
                 meta=meta,
             )
         )
+
     return out
 
 

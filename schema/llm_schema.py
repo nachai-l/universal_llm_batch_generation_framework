@@ -2,43 +2,51 @@ from typing import List, Literal
 from pydantic import BaseModel, Field, ConfigDict
 from pydantic import ConfigDict
 
-class LLMOutput(BaseModel):
-    """
-    Schema for the generated interview question and example answers.
-    Used for strict validation of LLM generation output.
-    """
+class QuestionItem(BaseModel):
+    """Represents a single interview question and its associated evaluation data."""
     model_config = ConfigDict(extra="forbid")
 
+    question_id: str = Field(
+        ..., 
+        description="The unique identifier for the question."
+    )
     question_name: str = Field(
         ..., 
-        description="A clear, realistic interview question aligned with the role and level."
+        description="The full interrogative sentence of the interview question."
     )
     example_answer_good: str = Field(
         ..., 
-        description="A high-quality (7-10) structured and relevant answer for a junior candidate."
+        description="A high-quality example response that meets all criteria."
     )
     example_answer_mid: str = Field(
         ..., 
-        description="A medium-quality (4-6) generic answer that lacks specificity or depth."
+        description="A mediocre example response that is acceptable but lacking depth."
     )
     example_answer_bad: str = Field(
         ..., 
-        description="A low-quality (3 or less) vague or off-topic answer."
+        description="A poor example response that demonstrates lack of skill or red flags."
     )
     grading_rubrics: str = Field(
         ..., 
-        description="Concise rubric sections including Good, To avoid, and Red Flag criteria."
+        description="Structured rubrics containing 'Good:', 'To avoid:', and 'Red Flag:' sections."
+    )
+
+class LLMOutput(BaseModel):
+    """The structured output containing the full set of generated interview questions."""
+    model_config = ConfigDict(extra="forbid")
+
+    questions: List[QuestionItem] = Field(
+        ..., 
+        description="A list of generated interview questions for the specified role."
     )
 
 class JudgeResult(BaseModel):
-    """
-    Schema for the judge LLM output when evaluating responses.
-    """
+    """The result of an LLM-based evaluation or grading process."""
     model_config = ConfigDict(extra="forbid")
 
     verdict: Literal["PASS", "FAIL"] = Field(
         ..., 
-        description="The final pass or fail judgment based on evaluation criteria."
+        description="The final pass or fail judgment."
     )
     score: int = Field(
         ..., 
@@ -48,7 +56,7 @@ class JudgeResult(BaseModel):
     )
     reasons: List[str] = Field(
         default_factory=list, 
-        description="A list of specific reasons or justifications for the score and verdict."
+        description="A list of specific reasons or feedback points supporting the verdict."
     )
 
 __all__ = ["LLMOutput", "JudgeResult"]
