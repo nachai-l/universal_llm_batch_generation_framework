@@ -94,36 +94,30 @@ def _build_client_bundle(params: Any, *, credentials_cfg: Any, model_name: str) 
     """
     Backward-compatible client builder.
 
-    Supports TWO shapes (so tests can monkeypatch either):
     A) Legacy: functions.llm.client_factory.build_gemini_client(silence_logs=...) -> client_obj
-    B) Current: functions.llm.client.build_gemini_client(credentials_cfg, model_name_override=...) -> {"client":..., "model_name":...}
-
-    Returns:
-      {"client": <obj>, "model_name": <str>}
+    B) Current: functions.llm.client.build_gemini_client(credentials_config, model_name_override=...) -> {"client":..., "model_name":...}
     """
     logger = get_logger(__name__)
 
-    # Prefer legacy module if present (tests may monkeypatch this name)
+    # 1) Prefer legacy module if present (tests may monkeypatch this)
     try:
-        from functions.llm.client_factory import build_gemini_client  # type: ignore
-        legacy = True
-    except Exception:
-        from functions.llm.client import build_gemini_client  # type: ignore
-        legacy = False
+        from functions.llm.client_factory import build_gemini_client as build_gemini_client_legacy  # type: ignore
+        client_obj = build_gemini_client_legacy(
+            silence_logs=bool(getattr(params.llm, "silence_client_lv_logs", True))
+        )
+        return {"client": client_obj, "model_name": str(model_name)}
+    except ImportError:
+        pass  # legacy module not present
 
-    if not legacy:
-        try:
-            out = build_gemini_client(credentials_cfg, model_name_override=model_name)  # type: ignore[misc]
-            if isinstance(out, dict) and "client" in out and "model_name" in out:
-                return {"client": out["client"], "model_name": str(out["model_name"])}
-            return {"client": out, "model_name": str(model_name)}
-        except TypeError as e:
-            logger.debug("New client builder signature mismatch, falling back to legacy: %s", str(e))
+    # 2) Current module (typed signature)
+    from functions.llm.client import build_gemini_client as build_gemini_client_current
 
-    client_obj = build_gemini_client(  # type: ignore[misc]
-        silence_logs=bool(getattr(params.llm, "silence_client_lv_logs", True))
-    )
-    return {"client": client_obj, "model_name": str(model_name)}
+    out = build_gemini_client_current(credentials_cfg, model_name_override=model_name)
+    if isinstance(out, dict) and "client" in out and "model_name" in out:
+        return {"client": out["client"], "model_name": str(out["model_name"])}
+
+    # Defensive fallback if someone returns raw client object
+    return {"client": out, "model_name": str(model_name)}
 
 
 def _get_thread_client_ctx(params: Any, *, credentials_cfg: Any, model_name: str) -> Dict[str, Any]:
@@ -149,29 +143,40 @@ def _resolve_context_for_item(item: WorkRef, gc_map: Dict[str, str]) -> str:
     """
     Resolve full context for a WorkItem across modes:
 
-    - Dedup mode: item.group_context_id exists -> lookup in gc_map
-    - Non-dedup: item may carry inline context (row-wise / group_output)
+    - Dedup mode (row_output_with_group_context + dedupe): use group_context_id -> gc_map
+    - Otherwise (group_output / row-wise / legacy): use inline item.context
     """
-    gid = getattr(item, "group_context_id", None)
-    if gid:
-        ctx = gc_map.get(str(gid))
-        if ctx is None:
+    meta = getattr(item, "meta", None) or {}
+    deduped = bool(meta.get("deduped_group_context", False))
+
+    # 1) DEDUP path: must use gc_map
+    if deduped:
+        gid = meta.get("group_context_id") or getattr(item, "group_context_id", None)
+        if not gid:
             raise RuntimeError(
-                f"Missing group context id={gid} work_id={item.work_id} group_key={getattr(item, 'group_key', None)}"
+                f"Dedup item missing group_context_id work_id={item.work_id} group_key={getattr(item, 'group_key', None)}"
             )
-        if not str(ctx).strip():
+        ctx = gc_map.get(str(gid))
+        if ctx is None or not str(ctx).strip():
             raise RuntimeError(
-                f"Empty group context id={gid} work_id={item.work_id} group_key={getattr(item, 'group_key', None)}"
+                f"Missing/empty group context id={gid} work_id={item.work_id} group_key={getattr(item, 'group_key', None)}"
             )
         return str(ctx)
 
+    # 2) Non-dedup path: use inline context (group_output or row-wise)
     inline_ctx = getattr(item, "context", None)
     if isinstance(inline_ctx, str) and inline_ctx.strip():
         return inline_ctx
 
+    # 3) Fallback: allow non-dedup items to optionally use gc_map if present (but do NOT require it)
+    gid = meta.get("group_context_id") or getattr(item, "group_context_id", None)
+    if gid and (str(gid) in gc_map) and str(gc_map[str(gid)]).strip():
+        return str(gc_map[str(gid)])
+
     raise RuntimeError(
-        "WorkItem missing both group_context_id and inline context: "
-        f"work_id={item.work_id} group_key={getattr(item, 'group_key', None)}"
+        "WorkItem missing usable context: "
+        f"work_id={item.work_id} group_key={getattr(item, 'group_key', None)} "
+        f"deduped={deduped} has_inline={bool(inline_ctx and str(inline_ctx).strip())} gid={gid}"
     )
 
 
@@ -404,11 +409,13 @@ def main(
     items = parse_pipeline3_items(wi_obj)
 
     # group_contexts artifact may be absent in non-dedup modes; treat missing as empty map
+    needs_gc = any(bool((getattr(it, "meta", None) or {}).get("deduped_group_context", False)) for it in items)
+
     gc_map: Dict[str, str] = {}
-    try:
-        gc_obj = read_json(group_contexts_path)
+    if needs_gc:
+        gc_obj = read_json(group_contexts_path)  # let FileNotFoundError raise
         gc_map = load_group_context_map(gc_obj)
-    except FileNotFoundError:
+    else:
         gc_map = {}
 
     # Prepare dirs

@@ -252,9 +252,9 @@ def ingest_input_table_pipeline2(params: Any) -> dict[str, Any]:
             "input_format": str(in_cfg.format),
             "n_rows": n_rows,
             "n_cols": n_cols,
-            "columns": cols,  # ✅ add this
+            "columns": cols,
         },
-        "columns": cols,  # (optional keep)
+        "columns": cols,
         "rows": rows,
         "n_rows": n_rows,
         "n_cols": n_cols,

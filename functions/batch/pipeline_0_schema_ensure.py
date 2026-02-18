@@ -226,7 +226,6 @@ def _call_llm_generate_schema(prompt_path: str | Path, params: Any, creds: Any) 
     temperature = float(getattr(params.llm, "temperature", 0.3))
     max_retries = int(getattr(params.llm, "max_retries", 3))
 
-    # ✅ FIX: align with parameters.yaml
     # cache:
     #   enabled: true
     #   dir: artifacts/cache
@@ -278,7 +277,6 @@ def main() -> int:
     creds = load_credentials()
     ensure_dirs(params)
 
-    # ✅ Confirmed: yaml key is llm_schema.py_path (you said you fixed params.llm_schema.path -> py_path)
     schema_path = Path(params.llm_schema.py_path)
     archive_dir = Path(params.llm_schema.archive_dir)
 
@@ -305,7 +303,7 @@ def main() -> int:
 
     raw = _call_llm_generate_schema(prompt_path=prompt_path, params=params, creds=creds)
 
-    # ✅ post-LLM deterministic hardening (fences + model_config + __all__)
+    # post-LLM deterministic hardening (fences + model_config + __all__)
     py_code = postprocess_schema_py(raw, required_exports=("LLMOutput", "JudgeResult"))
 
     if not py_code.strip():

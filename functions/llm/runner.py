@@ -264,6 +264,7 @@ def run_prompt_yaml_json(
     model_name = client_ctx["model_name"]
 
     last_err: Optional[Exception] = None
+    out_text: str = ""
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -363,6 +364,7 @@ def run_prompt_yaml_text(
     model_name = client_ctx["model_name"]
 
     last_err: Optional[Exception] = None
+    out_text: str = ""
 
     for attempt in range(1, max_retries + 1):
         try:

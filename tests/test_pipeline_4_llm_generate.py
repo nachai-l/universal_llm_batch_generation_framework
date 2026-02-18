@@ -1,11 +1,13 @@
 # tests/test_pipeline_4_llm_generate.py
 
 from __future__ import annotations
-from functions.core.llm_batch_storage import stable_cache_id
+
 import json
 from pathlib import Path
 
 import pytest
+
+from functions.core.llm_batch_storage import stable_cache_id
 
 
 def _write_json(p: Path, obj) -> None:
@@ -13,12 +15,9 @@ def _write_json(p: Path, obj) -> None:
     p.write_text(json.dumps(obj, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
-def test_pipeline4_writes_one_file_per_success(tmp_path, monkeypatch):
-    repo = tmp_path
-    (repo / "configs").mkdir(parents=True, exist_ok=True)
-    (repo / "prompts").mkdir(parents=True, exist_ok=True)
+def _write_minimal_schema_and_prompts(repo: Path) -> tuple[Path, Path]:
     (repo / "schema").mkdir(parents=True, exist_ok=True)
-    (repo / "artifacts" / "cache").mkdir(parents=True, exist_ok=True)
+    (repo / "prompts").mkdir(parents=True, exist_ok=True)
 
     # --- schema/llm_schema.py (minimal) ---
     (repo / "schema" / "llm_schema.py").write_text(
@@ -39,17 +38,18 @@ class JudgeResult(BaseModel):
     )
     (repo / "schema" / "llm_schema.txt").write_text('{"type":"object"}\n', encoding="utf-8")
 
-    # --- prompts ---
-    (repo / "prompts" / "generation.yaml").write_text(
-        "name: gen\nuser: |\n  {context}\n  {llm_schema}\n", encoding="utf-8"
-    )
-    (repo / "prompts" / "judge.yaml").write_text(
-        "name: judge\nuser: |\n  {output_json}\n", encoding="utf-8"
-    )
+    gen_prompt = repo / "prompts" / "generation.yaml"
+    judge_prompt = repo / "prompts" / "judge.yaml"
+    gen_prompt.write_text("name: gen\nuser: |\n  {context}\n  {llm_schema}\n", encoding="utf-8")
+    judge_prompt.write_text("name: judge\nuser: |\n  {output_json}\n", encoding="utf-8")
 
-    # --- parameters.yaml ---
+    return gen_prompt, judge_prompt
+
+
+def _write_parameters(repo: Path, *, cache_force: bool) -> None:
+    (repo / "configs").mkdir(parents=True, exist_ok=True)
     (repo / "configs" / "parameters.yaml").write_text(
-        """
+        f"""
 run:
   name: t
   timezone: Asia/Tokyo
@@ -74,7 +74,7 @@ context:
     include: []
     exclude: []
   row_template: |
-    {__ROW_KV_BLOCK__}
+    {{__ROW_KV_BLOCK__}}
   auto_kv_block: true
   kv_order: input_order
   max_context_chars: 12000
@@ -110,7 +110,7 @@ llm:
 
 cache:
   enabled: true
-  force: false
+  force: {"true" if cache_force else "false"}
   dir: artifacts/cache
   dump_failures: true
 
@@ -134,32 +134,52 @@ report:
         encoding="utf-8",
     )
 
-    # --- pipeline3 artifacts (DEDUP) ---
+
+def _write_pipeline3_dedup_artifacts(repo: Path, *, n_items: int) -> None:
+    (repo / "artifacts" / "cache").mkdir(parents=True, exist_ok=True)
+
+    # IMPORTANT: Pipeline 4 always reads group_contexts_path first (even if later cache-skip),
+    # so tests must always write this file.
     _write_json(
         repo / "artifacts" / "cache" / "pipeline3_group_contexts.json",
         {
             "n_groups": 1,
-            "groups": [
-                {"group_key": "A", "group_context_id": "gid_A", "context": "q: hello\nq: world"}
-            ],
-        },
-    )
-    _write_json(
-        repo / "artifacts" / "cache" / "pipeline3_work_items.json",
-        {
-            "n_items": 2,
-            "items": [
-                {"work_id": "w1", "group_key": "A", "row_index": 0, "group_context_id": "gid_A", "meta": {}},
-                {"work_id": "w2", "group_key": "A", "row_index": 1, "group_context_id": "gid_A", "meta": {}},
-            ],
+            "groups": [{"group_key": "A", "group_context_id": "gid_A", "context": "q: hello\nq: world"}],
         },
     )
 
-    # --- monkeypatch client factory ---
-    # We patch where pipeline imports it at runtime:
+    items = []
+    for i in range(n_items):
+        items.append(
+            {
+                "work_id": f"w{i+1}",
+                "group_key": "A",
+                "row_index": i,
+                "group_context_id": "gid_A",
+                # DEDUP mode: Pipeline 4 resolves context via gc_map if this flag is True
+                "meta": {"deduped_group_context": True, "group_context_id": "gid_A"},
+            }
+        )
+
+    _write_json(
+        repo / "artifacts" / "cache" / "pipeline3_work_items.json",
+        {"n_items": n_items, "items": items},
+    )
+
+
+def _monkeypatch_client_factory(monkeypatch):
     import types
+
     dummy_factory_mod = types.SimpleNamespace(build_gemini_client=lambda silence_logs=True: object())
     monkeypatch.setitem(__import__("sys").modules, "functions.llm.client_factory", dummy_factory_mod)
+
+
+def test_pipeline4_writes_one_file_per_success(tmp_path, monkeypatch):
+    repo = tmp_path
+    _write_minimal_schema_and_prompts(repo)
+    _write_parameters(repo, cache_force=False)
+    _write_pipeline3_dedup_artifacts(repo, n_items=2)
+    _monkeypatch_client_factory(monkeypatch)
 
     # --- monkeypatch runner: gen always OK, judge always pass ---
     from pydantic import BaseModel, ConfigDict
@@ -174,14 +194,12 @@ report:
         feedback: str = ""
 
     def _fake_run_prompt_yaml_json(prompt_path, variables, schema_model, client_ctx, **kwargs):
-        name = str(prompt_path)
-        if name.endswith("judge.yaml"):
+        if str(prompt_path).endswith("judge.yaml"):
             return _Judge(passed=True, feedback="")
         return _Gen(foo="ok")
 
     monkeypatch.setattr("functions.batch.pipeline_4_llm_generate.run_prompt_yaml_json", _fake_run_prompt_yaml_json)
 
-    # run
     from functions.batch.pipeline_4_llm_generate import main as p4_main
 
     rc = p4_main(
@@ -206,129 +224,10 @@ report:
 
 def test_pipeline4_judge_fail_triggers_retry_then_success(tmp_path, monkeypatch):
     repo = tmp_path
-    (repo / "configs").mkdir(parents=True, exist_ok=True)
-    (repo / "prompts").mkdir(parents=True, exist_ok=True)
-    (repo / "schema").mkdir(parents=True, exist_ok=True)
-    (repo / "artifacts" / "cache").mkdir(parents=True, exist_ok=True)
-
-    (repo / "schema" / "llm_schema.py").write_text(
-        """
-from pydantic import BaseModel, ConfigDict
-
-class LLMOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    foo: str
-
-class JudgeResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    passed: bool
-    feedback: str = ""
-""".strip()
-        + "\n",
-        encoding="utf-8",
-    )
-    (repo / "schema" / "llm_schema.txt").write_text('{"type":"object"}\n', encoding="utf-8")
-    (repo / "prompts" / "generation.yaml").write_text("name: gen\nuser: |\n  {context}\n", encoding="utf-8")
-    (repo / "prompts" / "judge.yaml").write_text("name: judge\nuser: |\n  {output_json}\n", encoding="utf-8")
-
-    (repo / "configs" / "parameters.yaml").write_text(
-        """
-run:
-  name: t
-  timezone: Asia/Tokyo
-  log_level: INFO
-
-input:
-  path: raw_data/input.csv
-  format: csv
-  encoding: utf-8
-  sheet: null
-  required_columns: null
-
-grouping:
-  enabled: true
-  column: "group"
-  mode: row_output_with_group_context
-  max_rows_per_group: 50
-
-context:
-  columns:
-    mode: all
-    include: []
-    exclude: []
-  row_template: |
-    {__ROW_KV_BLOCK__}
-  auto_kv_block: true
-  kv_order: input_order
-  max_context_chars: 12000
-  truncate_field_chars: 0
-  group_header_template: null
-  group_footer_template: null
-
-prompts:
-  generation:
-    path: prompts/generation.yaml
-  judge:
-    enabled: true
-    path: prompts/judge.yaml
-  schema_auto_py_generation:
-    path: prompts/schema_auto_py_generation.yaml
-  schema_auto_json_summarization:
-    path: prompts/schema_auto_json_summarization.yaml
-
-llm_schema:
-  py_path: schema/llm_schema.py
-  txt_path: schema/llm_schema.txt
-  auto_generate: false
-  force_regenerate: false
-  archive_dir: archived/
-
-llm:
-  model_name: dummy
-  temperature: 0.0
-  max_retries: 2
-  timeout_sec: 60
-  max_workers: 1
-  silence_client_lv_logs: true
-
-cache:
-  enabled: true
-  force: true
-  dir: artifacts/cache
-  dump_failures: true
-
-artifacts:
-  dir: artifacts
-  outputs_dir: artifacts/outputs
-  reports_dir: artifacts/reports
-  logs_dir: artifacts/logs
-
-outputs:
-  formats: [jsonl]
-  psv_path: artifacts/outputs/output.psv
-  jsonl_path: artifacts/outputs/output.jsonl
-
-report:
-  enabled: false
-  md_path: artifacts/reports/report.md
-  html_path: artifacts/reports/report.html
-""".strip()
-        + "\n",
-        encoding="utf-8",
-    )
-
-    _write_json(
-        repo / "artifacts" / "cache" / "pipeline3_group_contexts.json",
-        {"n_groups": 1, "groups": [{"group_key": "A", "group_context_id": "gid_A", "context": "ctx"}]},
-    )
-    _write_json(
-        repo / "artifacts" / "cache" / "pipeline3_work_items.json",
-        {"n_items": 1, "items": [{"work_id": "w1", "group_key": "A", "row_index": 0, "group_context_id": "gid_A", "meta": {}}]},
-    )
-
-    import types
-    dummy_factory_mod = types.SimpleNamespace(build_gemini_client=lambda silence_logs=True: object())
-    monkeypatch.setitem(__import__("sys").modules, "functions.llm.client_factory", dummy_factory_mod)
+    _write_minimal_schema_and_prompts(repo)
+    _write_parameters(repo, cache_force=True)
+    _write_pipeline3_dedup_artifacts(repo, n_items=1)
+    _monkeypatch_client_factory(monkeypatch)
 
     from pydantic import BaseModel, ConfigDict
 
@@ -344,10 +243,8 @@ report:
     calls = {"gen": 0, "judge": 0}
 
     def _fake_run(prompt_path, variables, schema_model, client_ctx, **kwargs):
-        name = str(prompt_path)
-        if name.endswith("judge.yaml"):
+        if str(prompt_path).endswith("judge.yaml"):
             calls["judge"] += 1
-            # first judge fail, second pass
             if calls["judge"] == 1:
                 return _Judge(passed=False, feedback="Fix output")
             return _Judge(passed=True, feedback="")
@@ -380,6 +277,7 @@ report:
     assert payload["parsed"]["foo"] in {"ok1", "ok2"}
     assert payload["judge"]["passed"] is True
 
+
 def test_pipeline4_skips_existing_output_when_cache_enabled_and_not_force(tmp_path, monkeypatch):
     """
     If artifacts/cache/llm_outputs/{cache_id}.json already exists:
@@ -388,140 +286,11 @@ def test_pipeline4_skips_existing_output_when_cache_enabled_and_not_force(tmp_pa
     => Pipeline 4 must SKIP calling the LLM runner for that item and count it as cache_skipped.
     """
     repo = tmp_path
-    (repo / "configs").mkdir(parents=True, exist_ok=True)
-    (repo / "prompts").mkdir(parents=True, exist_ok=True)
-    (repo / "schema").mkdir(parents=True, exist_ok=True)
-    (repo / "artifacts" / "cache").mkdir(parents=True, exist_ok=True)
+    gen_prompt, judge_prompt = _write_minimal_schema_and_prompts(repo)
+    _write_parameters(repo, cache_force=False)
+    _write_pipeline3_dedup_artifacts(repo, n_items=1)
+    _monkeypatch_client_factory(monkeypatch)
 
-    # --- schema ---
-    (repo / "schema" / "llm_schema.py").write_text(
-        """
-from pydantic import BaseModel, ConfigDict
-
-class LLMOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    foo: str
-
-class JudgeResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    passed: bool
-    feedback: str = ""
-""".strip()
-        + "\n",
-        encoding="utf-8",
-    )
-    (repo / "schema" / "llm_schema.txt").write_text('{"type":"object"}\n', encoding="utf-8")
-
-    # --- prompts ---
-    gen_prompt = repo / "prompts" / "generation.yaml"
-    judge_prompt = repo / "prompts" / "judge.yaml"
-    gen_prompt.write_text("name: gen\nuser: |\n  {context}\n  {llm_schema}\n", encoding="utf-8")
-    judge_prompt.write_text("name: judge\nuser: |\n  {output_json}\n", encoding="utf-8")
-
-    # --- parameters.yaml (cache.force=false) ---
-    (repo / "configs" / "parameters.yaml").write_text(
-        """
-run:
-  name: t
-  timezone: Asia/Tokyo
-  log_level: INFO
-
-input:
-  path: raw_data/input.csv
-  format: csv
-  encoding: utf-8
-  sheet: null
-  required_columns: null
-
-grouping:
-  enabled: true
-  column: "group"
-  mode: row_output_with_group_context
-  max_rows_per_group: 50
-
-context:
-  columns:
-    mode: all
-    include: []
-    exclude: []
-  row_template: |
-    {__ROW_KV_BLOCK__}
-  auto_kv_block: true
-  kv_order: input_order
-  max_context_chars: 12000
-  truncate_field_chars: 0
-  group_header_template: null
-  group_footer_template: null
-
-prompts:
-  generation:
-    path: prompts/generation.yaml
-  judge:
-    enabled: true
-    path: prompts/judge.yaml
-  schema_auto_py_generation:
-    path: prompts/schema_auto_py_generation.yaml
-  schema_auto_json_summarization:
-    path: prompts/schema_auto_json_summarization.yaml
-
-llm_schema:
-  py_path: schema/llm_schema.py
-  txt_path: schema/llm_schema.txt
-  auto_generate: false
-  force_regenerate: false
-  archive_dir: archived/
-
-llm:
-  model_name: dummy
-  temperature: 0.0
-  max_retries: 2
-  timeout_sec: 60
-  max_workers: 1
-  silence_client_lv_logs: true
-
-cache:
-  enabled: true
-  force: false
-  dir: artifacts/cache
-  dump_failures: true
-
-artifacts:
-  dir: artifacts
-  outputs_dir: artifacts/outputs
-  reports_dir: artifacts/reports
-  logs_dir: artifacts/logs
-
-outputs:
-  formats: [jsonl]
-  psv_path: artifacts/outputs/output.psv
-  jsonl_path: artifacts/outputs/output.jsonl
-
-report:
-  enabled: false
-  md_path: artifacts/reports/report.md
-  html_path: artifacts/reports/report.html
-""".strip()
-        + "\n",
-        encoding="utf-8",
-    )
-
-    # --- pipeline3 artifacts (DEDUP) ---
-    _write_json(
-        repo / "artifacts" / "cache" / "pipeline3_group_contexts.json",
-        {"n_groups": 1, "groups": [{"group_key": "A", "group_context_id": "gid_A", "context": "ctx"}]},
-    )
-    _write_json(
-        repo / "artifacts" / "cache" / "pipeline3_work_items.json",
-        {"n_items": 1, "items": [{"work_id": "w1", "group_key": "A", "row_index": 0, "group_context_id": "gid_A", "meta": {}}]},
-    )
-
-    # --- monkeypatch client factory ---
-    import types
-
-    dummy_factory_mod = types.SimpleNamespace(build_gemini_client=lambda silence_logs=True: object())
-    monkeypatch.setitem(__import__("sys").modules, "functions.llm.client_factory", dummy_factory_mod)
-
-    # --- compute expected cache_id and pre-create output file ---
     import functions.batch.pipeline_4_llm_generate as p4
 
     prompt_sha = p4.sha1_file(gen_prompt)
@@ -542,11 +311,13 @@ report:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{cache_id}.json"
     out_file.write_text(
-        json.dumps({"meta": {"cache_id": cache_id}, "parsed": {"foo": "cached"}, "judge": {"passed": True}}, ensure_ascii=False),
+        json.dumps(
+            {"meta": {"cache_id": cache_id}, "parsed": {"foo": "cached"}, "judge": {"passed": True}},
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
 
-    # --- monkeypatch runner: SHOULD NOT be called ---
     calls = {"n": 0}
 
     def _fake_run(*args, **kwargs):
@@ -555,7 +326,6 @@ report:
 
     monkeypatch.setattr("functions.batch.pipeline_4_llm_generate.run_prompt_yaml_json", _fake_run)
 
-    # run
     from functions.batch.pipeline_4_llm_generate import main as p4_main
 
     rc = p4_main(
@@ -583,134 +353,10 @@ def test_pipeline4_force_true_overwrites_existing_output(tmp_path, monkeypatch):
     and write a NEW payload (overwrite), i.e. no cache_skipped.
     """
     repo = tmp_path
-    (repo / "configs").mkdir(parents=True, exist_ok=True)
-    (repo / "prompts").mkdir(parents=True, exist_ok=True)
-    (repo / "schema").mkdir(parents=True, exist_ok=True)
-    (repo / "artifacts" / "cache").mkdir(parents=True, exist_ok=True)
-
-    (repo / "schema" / "llm_schema.py").write_text(
-        """
-from pydantic import BaseModel, ConfigDict
-
-class LLMOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    foo: str
-
-class JudgeResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    passed: bool
-    feedback: str = ""
-""".strip()
-        + "\n",
-        encoding="utf-8",
-    )
-    (repo / "schema" / "llm_schema.txt").write_text('{"type":"object"}\n', encoding="utf-8")
-
-    gen_prompt = repo / "prompts" / "generation.yaml"
-    judge_prompt = repo / "prompts" / "judge.yaml"
-    gen_prompt.write_text("name: gen\nuser: |\n  {context}\n  {llm_schema}\n", encoding="utf-8")
-    judge_prompt.write_text("name: judge\nuser: |\n  {output_json}\n", encoding="utf-8")
-
-    # cache.force=true here
-    (repo / "configs" / "parameters.yaml").write_text(
-        """
-run:
-  name: t
-  timezone: Asia/Tokyo
-  log_level: INFO
-
-input:
-  path: raw_data/input.csv
-  format: csv
-  encoding: utf-8
-  sheet: null
-  required_columns: null
-
-grouping:
-  enabled: true
-  column: "group"
-  mode: row_output_with_group_context
-  max_rows_per_group: 50
-
-context:
-  columns:
-    mode: all
-    include: []
-    exclude: []
-  row_template: |
-    {__ROW_KV_BLOCK__}
-  auto_kv_block: true
-  kv_order: input_order
-  max_context_chars: 12000
-  truncate_field_chars: 0
-  group_header_template: null
-  group_footer_template: null
-
-prompts:
-  generation:
-    path: prompts/generation.yaml
-  judge:
-    enabled: true
-    path: prompts/judge.yaml
-  schema_auto_py_generation:
-    path: prompts/schema_auto_py_generation.yaml
-  schema_auto_json_summarization:
-    path: prompts/schema_auto_json_summarization.yaml
-
-llm_schema:
-  py_path: schema/llm_schema.py
-  txt_path: schema/llm_schema.txt
-  auto_generate: false
-  force_regenerate: false
-  archive_dir: archived/
-
-llm:
-  model_name: dummy
-  temperature: 0.0
-  max_retries: 2
-  timeout_sec: 60
-  max_workers: 1
-  silence_client_lv_logs: true
-
-cache:
-  enabled: true
-  force: true
-  dir: artifacts/cache
-  dump_failures: true
-
-artifacts:
-  dir: artifacts
-  outputs_dir: artifacts/outputs
-  reports_dir: artifacts/reports
-  logs_dir: artifacts/logs
-
-outputs:
-  formats: [jsonl]
-  psv_path: artifacts/outputs/output.psv
-  jsonl_path: artifacts/outputs/output.jsonl
-
-report:
-  enabled: false
-  md_path: artifacts/reports/report.md
-  html_path: artifacts/reports/report.html
-""".strip()
-        + "\n",
-        encoding="utf-8",
-    )
-
-    _write_json(
-        repo / "artifacts" / "cache" / "pipeline3_group_contexts.json",
-        {"n_groups": 1, "groups": [{"group_key": "A", "group_context_id": "gid_A", "context": "ctx"}]},
-    )
-    _write_json(
-        repo / "artifacts" / "cache" / "pipeline3_work_items.json",
-        {"n_items": 1, "items": [{"work_id": "w1", "group_key": "A", "row_index": 0, "group_context_id": "gid_A", "meta": {}}]},
-    )
-
-    import types
-
-    dummy_factory_mod = types.SimpleNamespace(build_gemini_client=lambda silence_logs=True: object())
-    monkeypatch.setitem(__import__("sys").modules, "functions.llm.client_factory", dummy_factory_mod)
+    gen_prompt, judge_prompt = _write_minimal_schema_and_prompts(repo)
+    _write_parameters(repo, cache_force=True)
+    _write_pipeline3_dedup_artifacts(repo, n_items=1)
+    _monkeypatch_client_factory(monkeypatch)
 
     import functions.batch.pipeline_4_llm_generate as p4
 
@@ -732,13 +378,11 @@ report:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{cache_id}.json"
 
-    # pre-existing payload
     out_file.write_text(
         json.dumps({"meta": {"cache_id": cache_id}, "parsed": {"foo": "OLD"}, "judge": {"passed": True}}, ensure_ascii=False),
         encoding="utf-8",
     )
 
-    # runner returns NEW payload
     from pydantic import BaseModel, ConfigDict
 
     class _Gen(BaseModel):
@@ -753,8 +397,7 @@ report:
     calls = {"gen": 0, "judge": 0}
 
     def _fake_run(prompt_path, variables, schema_model, client_ctx, **kwargs):
-        name = str(prompt_path)
-        if name.endswith("judge.yaml"):
+        if str(prompt_path).endswith("judge.yaml"):
             calls["judge"] += 1
             return _Judge(passed=True, feedback="")
         calls["gen"] += 1
@@ -776,7 +419,6 @@ report:
     assert calls["gen"] == 1
     assert calls["judge"] == 1
 
-    # overwritten
     payload = json.loads(out_file.read_text(encoding="utf-8"))
     assert payload["parsed"]["foo"] == "NEW"
 
