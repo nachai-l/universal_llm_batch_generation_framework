@@ -2,67 +2,54 @@ from typing import List, Literal
 from pydantic import BaseModel, Field, ConfigDict
 from pydantic import ConfigDict
 
-class QuestionItem(BaseModel):
+class LLMOutput(BaseModel):
     """
-    Represents an individual interview question with metadata and grading criteria.
+    Schema for the translated interview question content.
+    Represents the output of the bilingual translation engine.
     """
     model_config = ConfigDict(extra="forbid")
 
-    question_id: str = Field(
-        ..., 
-        description="The unique identifier for the question, preserved from context."
-    )
     question_name: str = Field(
         ..., 
-        description="The interrogative interview question text (at least 10 words, ends with ?)."
+        description="The translated interview question name, maintaining interrogative format."
     )
     example_answer_good: str = Field(
         ..., 
-        description="A strong, concrete, and structured response following the STAR method."
+        description="The translated high-quality example answer."
     )
     example_answer_mid: str = Field(
         ..., 
-        description="A mediocre response that is partially structured but lacks depth or specific details."
+        description="The translated medium-quality example answer."
     )
     example_answer_bad: str = Field(
         ..., 
-        description="A poor response that is vague, generic, or misaligned with the role expectations."
+        description="The translated low-quality example answer."
     )
     grading_rubrics: str = Field(
         ..., 
-        description="Detailed evaluation criteria covering intent, structure, depth, clarity, and relevance."
-    )
-
-class LLMOutput(BaseModel):
-    """
-    The complete structured output containing a list of generated interview questions.
-    """
-    model_config = ConfigDict(extra="forbid")
-
-    questions: List[QuestionItem] = Field(
-        ..., 
-        description="A list of question objects generated for the specified role."
+        description="The translated grading rubrics, preserving specific section headers and structure."
     )
 
 class JudgeResult(BaseModel):
     """
-    The structured output for evaluating or judging a specific input or response.
+    Schema for the judge's evaluation of the LLM output.
+    Used to validate the quality and adherence to instructions.
     """
     model_config = ConfigDict(extra="forbid")
 
     verdict: Literal["PASS", "FAIL"] = Field(
         ..., 
-        description="The final pass/fail decision based on the evaluation."
+        description="The final evaluation outcome."
     )
     score: int = Field(
         ..., 
         ge=0, 
         le=100, 
-        description="The numerical score assigned to the output (0 to 100)."
+        description="A quality score from 0 to 100."
     )
     reasons: List[str] = Field(
         default_factory=list, 
-        description="A list of specific justifications for the assigned score and verdict."
+        description="List of justifications for the verdict and score."
     )
 
-__all__ = ["LLMOutput", "JudgeResult", "QuestionItem"]
+__all__ = ["LLMOutput", "JudgeResult"]

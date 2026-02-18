@@ -1,15 +1,15 @@
 {
   "counts": {
     "n_expanded_rows": 0,
-    "n_exported_records": 24,
-    "n_group_context_missing": 24,
+    "n_exported_records": 250,
+    "n_group_context_missing": 0,
     "n_group_context_row_indices_missing": 0,
-    "n_group_outputs_seen": 24,
+    "n_group_outputs_seen": 0,
     "n_missing_output_file": 0,
     "n_row_index_out_of_range": 0,
-    "n_row_outputs_seen": 0,
+    "n_row_outputs_seen": 250,
     "n_selected_question_missing": 0,
-    "n_success_files": 24
+    "n_success_files": 250
   },
   "input": {
     "input_columns": [
@@ -21,9 +21,9 @@
     ]
   },
   "meta": {
-    "detected_mode": "group_output_unexpanded",
+    "detected_mode": "row_output_expanded",
     "drop_heavy_columns": true,
-    "generated_at_utc": "2026-02-18T13:55:47.985573Z",
+    "generated_at_utc": "2026-02-18T14:59:03.209798Z",
     "grouping_column": "Role Track Example Name",
     "outputs_jsonl": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/artifacts/outputs/output.jsonl",
     "outputs_psv": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/artifacts/outputs/output.psv",

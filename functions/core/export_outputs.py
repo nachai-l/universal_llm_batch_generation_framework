@@ -196,12 +196,51 @@ def build_group_context_index(p3_group_contexts_obj: Any) -> GroupContextIndex:
         if not isinstance(g, dict):
             continue
         gcid = str(g.get("group_context_id") or "").strip()
+        if not gcid and isinstance(g.get("meta"), dict):
+            gcid = str(g["meta"].get("group_context_id") or "").strip()
+        if not gcid:
+            gcid = str(g.get("id") or "").strip()
         if not gcid:
             continue
         out[gcid] = dict(g)
 
     return GroupContextIndex(by_id=out)
 
+
+def build_group_context_index_from_work_items(work_items: List[Dict[str, Any]]) -> GroupContextIndex:
+    """
+    Build group context index directly from WorkItems.
+
+    For group_output mode, the context is embedded in each WorkItem.
+    Extract unique group_context_id -> context mappings.
+    """
+    out: Dict[str, Dict[str, Any]] = {}
+
+    for item in work_items:
+        if not isinstance(item, dict):
+            continue
+
+        meta = item.get("meta")
+        if not isinstance(meta, dict):
+            continue
+
+        gcid = str(meta.get("group_context_id") or "").strip()
+        if not gcid or gcid in out:
+            continue
+
+        context_str = item.get("context")
+        if not isinstance(context_str, str):
+            continue
+
+        # Construct a group context object matching the expected shape
+        out[gcid] = {
+            "group_context_id": gcid,
+            "context": context_str,
+            "group_key": item.get("group_key") or meta.get("group_key") or "",
+            "meta": dict(meta),
+        }
+
+    return GroupContextIndex(by_id=out)
 
 # ---------------------------------------------------------------------
 # Selection logic (group-output expansion)
@@ -658,6 +697,7 @@ __all__ = [
     "HEAVY_EXPORT_COLUMNS_DEFAULT",
     "build_pipeline2_index",
     "build_group_context_index",
+    "build_group_context_index_from_work_items",
     "build_export_records",
     "flatten_for_psv",
     "compute_psv_column_order",

@@ -2,52 +2,56 @@
   "counts": {
     "judge_enabled": true,
     "n_fail": 0,
-    "n_pass": 24,
-    "n_records_jsonl": 24
+    "n_pass": 250,
+    "n_records_jsonl": 250
   },
   "data_quality": {
-    "group_output_records_detected": 24,
+    "group_output_records_detected": 0,
     "invalid_judge_count": 0,
-    "missing_input_count": 24,
+    "missing_input_count": 0,
     "missing_meta_count": 0,
     "missing_top_level_keys": {}
   },
   "group_counts": {
     "by_role": {
-      "Accountant": 1,
-      "Bioprocess Engineer": 1,
-      "Clinical Research Associate": 1,
-      "Cloud Solutions Architect": 1,
-      "Compliance Officer": 1,
-      "Consultant": 1,
-      "Corporate Recruiter": 1,
-      "Cybersecurity Analyst": 1,
-      "Data Engineer": 1,
-      "Data Scientist": 1,
-      "Environmental Sustainability Analyst": 1,
-      "Financial Analyst": 1,
-      "Graphic Designer": 1,
-      "Lawyer": 1,
-      "Logistics Coordinator": 1,
-      "Manufacturing Process Engineer": 1,
-      "Marketing Specialist": 1,
-      "Medical Doctor": 1,
-      "Mobile Application Developer": 1,
-      "New Reporter": 1,
-      "Product Owner": 1,
-      "Software Developer": 1,
-      "Teacher": 1,
-      "UX/UI Designer": 1
+      "Accountant": 10,
+      "Bioprocess Engineer": 10,
+      "Clinical Research Associate": 10,
+      "Cloud Solutions Architect": 10,
+      "Compliance Officer": 10,
+      "Consultant": 10,
+      "Corporate Recruiter": 10,
+      "Cybersecurity Analyst": 10,
+      "Data Engineer": 10,
+      "Data Scientist": 10,
+      "Environmental Sustainability Analyst": 10,
+      "Financial Analyst": 10,
+      "Graphic Designer": 10,
+      "Lawyer": 10,
+      "Logistics Coordinator": 10,
+      "Manufacturing Process Engineer": 10,
+      "Marketing Specialist": 10,
+      "Medical Doctor": 10,
+      "Mobile Application Developer": 10,
+      "New Reporter": 10,
+      "Product Owner": 10,
+      "Registered Nurse": 10,
+      "Software Developer": 10,
+      "Teacher": 10,
+      "UX/UI Designer": 10
     },
     "by_set": {
-      "(missing set)": 24
+      "A": 125,
+      "B": 125
     },
     "by_type": {
-      "(missing type)": 24
+      "Behavioral ​": 100,
+      "Situational​": 50,
+      "Specific": 100
     }
   },
   "meta": {
-    "generated_at_utc": "2026-02-18T13:55:48.254226Z",
+    "generated_at_utc": "2026-02-18T14:59:03.479010Z",
     "output_jsonl": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/artifacts/outputs/output.jsonl",
     "output_psv": "/Users/nachai.l/PycharmProjects/universal_llm_batch_gen_framework/artifacts/outputs/output.psv",
     "parameters_path": "configs/parameters.yaml",

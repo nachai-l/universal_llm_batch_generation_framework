@@ -27,6 +27,7 @@ from functions.core.export_outputs import (
     HEAVY_EXPORT_COLUMNS_DEFAULT,
     build_export_records,
     build_group_context_index,
+    build_group_context_index_from_work_items,
     build_pipeline2_index,
     compute_psv_column_order,
     flatten_for_psv,
@@ -85,6 +86,14 @@ def main(
 
     p3_gc_obj = read_json(p3_gc_path) if p3_gc_path.exists() else []
     group_index = build_group_context_index(p3_gc_obj)
+
+    # Fallback: if group contexts are empty, extract from work items
+    if not group_index.by_id:
+        p3_work_items_path = Path(resolve_path("artifacts/cache/pipeline3_work_items.json", base_dir=repo_root))
+        if p3_work_items_path.exists():
+            work_items_obj = read_json(p3_work_items_path)
+            if isinstance(work_items_obj, dict) and isinstance(work_items_obj.get("items"), list):
+                group_index = build_group_context_index_from_work_items(work_items_obj["items"])
 
     p4_manifest = read_json(p4m_path)
     outputs = p4_manifest.get("outputs") if isinstance(p4_manifest, dict) else None
