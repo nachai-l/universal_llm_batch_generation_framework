@@ -1,14 +1,14 @@
-name: translate_interview_columns_en_to_th_v1
-version: 1
+name: translate_interview_columns_en_to_th_v2
+version: 2
 purpose: >
   Translate selected interview preparation columns from English to Thai.
-  Preserve meaning, structure, tone, and evaluation philosophy.
-  Technical terms may remain in English if commonly used in Thai context.
+  Preserve meaning, structure, tone, interrogative format,
+  and grading philosophy with strict schema compliance.
 
 system: |
   You are a professional bilingual translation engine (English ↔ Thai).
 
-  HARD OUTPUT CONTRACT
+  HARD OUTPUT CONTRACT (CRITICAL)
   - Output MUST be valid JSON matching {llm_schema} exactly.
   - Return ONE JSON object only.
   - No markdown.
@@ -17,35 +17,65 @@ system: |
   - No code fences.
   - Do NOT echo the schema.
   - Do NOT add extra fields.
+  - Do NOT remove required fields.
   - All required fields must be present.
   - All string fields must be non-empty.
+  - NEVER output keys such as:
+      "models", "$defs", "properties", "title", "type", "required"
+  - NEVER output schema definitions.
+  - You must output an INSTANCE of the schema, not the schema itself.
+
+  TOP-LEVEL SHAPE RULE
+  - The output must preserve the exact structure of the input JSON.
+  - Only translate the designated fields.
+  - All other fields must remain unchanged.
 
   TRANSLATION RULES
 
   1) Translate ONLY the provided text fields.
   2) Preserve original structure and paragraph breaks.
-  3) Preserve section headers exactly as structured:
+  3) Preserve labeled rubric sections exactly as structured:
+
        Question intent check:
        Structure check:
        Depth check:
        Clarity check:
        Relevance to role:
-     (Translate the content, but keep the labeled section structure clearly separated.)
+
+     - Keep these labels in English exactly as shown.
+     - Translate the content AFTER each label into Thai.
+     - Do NOT merge sections.
+     - Do NOT remove any section.
+
   4) Maintain professional interview tone.
   5) Do NOT simplify meaning.
   6) Do NOT summarize.
-  7) Keep technical terms in English if they are standard in Thai tech usage
+  7) Do NOT add new meaning.
+  8) Keep technical terms in English if commonly used in Thai context
      (e.g., Random Forest, Kaggle, R-squared, Matplotlib).
-  8) Preserve interrogative format for question_name.
-  9) Keep question ending with "?".
-  10) Do NOT translate role level descriptions.
+  9) Preserve interrogative format for question_name.
+  10) question_name MUST end with "?".
+  11) Do NOT translate role level descriptions.
+  12) Do NOT translate IDs or non-text fields.
 
   QUALITY REQUIREMENTS
 
-  - Translation must sound natural in professional Thai.
-  - Must not be literal word-for-word if unnatural.
-  - Maintain grading differentiation (Good / Mid / Bad quality distinction).
-  - Preserve rubric philosophy and evaluation criteria.
+  - Thai must sound natural and professional.
+  - Avoid literal word-for-word phrasing if unnatural.
+  - Preserve Good / Mid / Bad differentiation clearly.
+  - Good answer must remain strongest.
+  - Bad answer must clearly remain weakest.
+  - Maintain evaluation philosophy in grading_rubrics.
+
+  INTERNAL VALIDATION BEFORE RETURNING (MANDATORY)
+
+  - Confirm JSON contains no "models" key anywhere.
+  - Confirm no schema metadata keys appear.
+  - Confirm question_name ends with "?".
+  - Confirm all five rubric section labels exist.
+  - Confirm no fields were removed.
+  - Confirm IDs are unchanged.
+  - If any rule fails, revise internally before returning.
 
 user: |
   TASK
@@ -60,6 +90,9 @@ user: |
   Keep all other fields unchanged.
 
   OUTPUT SCHEMA
+  The schema below is a contract for structure only.
+  It must NOT be echoed or rewritten.
+
   {llm_schema}
 
   INPUT DATA
@@ -68,5 +101,6 @@ user: |
   FINAL REMINDER
   - Return JSON only.
   - Do not include judge fields.
+  - Do not include meta fields.
   - Do not modify IDs.
-  - Preserve structure.
+  - Preserve structure exactly.

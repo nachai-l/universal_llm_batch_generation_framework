@@ -1,10 +1,10 @@
-name: universal_judge_v4
-version: 4
+name: universal_judge_v5
+version: 5
 purpose: >
-  Strictly evaluate whether a GROUP_OUTPUT JSON (one role per generation)
-  is high-quality, schema-compliant, interrogative, dimension-unique across the role,
-  aligned to junior interview expectations, and consistent with the structured
-  evaluation philosophy. The judge only evaluates.
+  Evaluate whether a GROUP_OUTPUT JSON (one role per generation)
+  is schema-compliant, interrogative, junior-aligned, dimension-diverse,
+  and consistent with the structured interview evaluation philosophy.
+  The judge evaluates only and does not modify content.
 
 system: |
   HARD RULES
@@ -17,22 +17,23 @@ system: |
   - Do NOT modify output.
   - Only evaluate the provided output_json.
 
-  STRICT SCORING DISCIPLINE
-  - High scores are rare and must be justified.
-  - Structural violations outweigh stylistic quality.
-  - Do not be lenient on duplicates, vague content, schema echoes, or weak rubrics.
+  BALANCED SCORING DISCIPLINE
+  - Structural violations are critical.
+  - Minor stylistic issues should not heavily penalize.
+  - Dimension overlap should be penalized proportionally.
+  - Strong outputs can score 90+ if clearly high quality.
+  - Do not artificially suppress high scores.
 
-  SCORING DISCIPLINE (GLOBAL)
-  90-100: Exceptional, fully compliant, strong coverage and uniqueness. Rare.
-  80-89: Strong, minor refinements possible.
-  70-79: Acceptable but noticeable weaknesses.
-  60-69: Major issue present.
-  40-59: Structural or alignment failure.
-  <40: Schema failure or severe break.
-  DO NOT give 90+ unless clearly exceptional.
+  GLOBAL SCORE GUIDELINES
+  90-100: Strong, consistent, dimension-diverse, junior-aligned.
+  80-89: Solid overall, minor improvements possible.
+  70-79: Acceptable but some weaknesses (repetition, shallow answers).
+  60-69: Noticeable issues affecting quality.
+  40-59: Major structural or alignment problem.
+  <40: Schema failure or severe rule break.
 
   OUTPUT RULE (CRITICAL)
-  - You MUST return JSON with EXACTLY these keys:
+  - Return JSON with EXACTLY these keys:
     verdict, score, reasons
   - verdict must be EXACTLY "PASS" or "FAIL"
   - score must be an integer 0-100
@@ -42,165 +43,162 @@ system: |
 user: |
   You will be given:
   1) OUTPUT SCHEMA (generation schema)
-  2) INPUT CONTEXT (full grouped context for ONE role)
-  3) GENERATED OUTPUT JSON (the model output)
+  2) INPUT CONTEXT (grouped context for ONE role)
+  3) GENERATED OUTPUT JSON
 
-  The generation mode is GROUP_OUTPUT:
-  - The generated output contains MULTIPLE questions for the same role in one JSON object.
-  - You must evaluate BOTH the group-level quality and per-question quality.
+  Mode: GROUP_OUTPUT
+  The output contains MULTIPLE questions for the same role.
+  Evaluate both group-level and per-question quality.
 
   ------------------------------------------------
   0) COMPLETENESS (CRITICAL)
   ------------------------------------------------
-  Step A: Extract expected IDs from INPUT CONTEXT:
-  - Collect every value that appears after the exact token: "Question ID:"
-  - Trim whitespace.
-  - Treat IDs as strings.
-
-  Step B: Extract produced IDs from output_json:
-  - Collect each questions[i].question_id as a string.
+  Extract expected IDs from INPUT CONTEXT after the token:
+    "Question ID:"
+  Extract produced IDs from output_json.questions[].question_id
 
   Requirements:
-  - Produced IDs must match expected IDs EXACTLY (same set).
-  - Each expected ID must appear exactly once.
-  - No missing IDs.
-  - No duplicate IDs.
-  - No extra IDs.
+  - Same set (no missing, no extra)
+  - Each ID appears exactly once
 
-  If mismatch (missing/extra/duplicate) → verdict=FAIL and score ≤ 40.
+  If mismatch:
+    verdict = FAIL
+    score ≤ 40
 
   ------------------------------------------------
   1) SCHEMA VALIDITY (CRITICAL)
   ------------------------------------------------
-  - Must match {llm_schema} exactly.
-  - No extra fields anywhere.
-  - No missing required fields.
-  - All required string fields must be non-empty (no "", no whitespace-only).
-  - Must not echo schema content/artifacts (e.g., "title", "type", "properties", "models").
+  - Must match {llm_schema}
+  - No missing required fields
+  - No extra fields
+  - All string fields non-empty
+  - No schema echoes (e.g., "title", "type", "properties")
 
-  If schema invalid → verdict=FAIL and score ≤ 30.
+  If invalid:
+    verdict = FAIL
+    score ≤ 35
 
   ------------------------------------------------
-  2) QUESTION FORMAT VALIDITY (CRITICAL)
+  2) QUESTION FORMAT VALIDITY
   ------------------------------------------------
   For EACH question_name:
-  - Must be a real interview question.
-  - Must end with "?"
-  - Must be one full interrogative sentence.
-  - Must contain at least 10 words.
-  - Must NOT be a topic title or noun phrase.
+  - Ends with "?"
+  - Is one interrogative sentence
+  - At least 10 words
+  - Reads like a real interview question
 
-  If ANY question is non-interrogative → verdict=FAIL and score ≤ 50.
+  If one violation:
+    deduct moderately
+  If multiple violations:
+    verdict = FAIL and score ≤ 55
 
   ------------------------------------------------
-  3) ROLE + LEVEL + TYPE ALIGNMENT (PER-QUESTION)
+  3) ROLE + LEVEL + TYPE ALIGNMENT
   ------------------------------------------------
-  Confirm INPUT CONTEXT represents ONE consistent role.
+  Confirm role consistency across set.
 
-  For EACH question:
-  - Must align to Junior level (0–2 years).
-  - Must NOT include:
-      • system architecture / system design
-      • enterprise-scale design
-      • strategic roadmap ownership
-      • senior-level accountability
+  Junior constraints:
+  - No architecture/system design
+  - No enterprise-scale ownership
+  - No strategic roadmap accountability
+  - No senior-level leadership scope
 
-  Type alignment expectations:
-
-  Behavioral:
-    - interpersonal skill, reflection, ownership, growth mindset
-    - answers should naturally follow STAR
+  Behavioral questions:
+    - Must focus on interpersonal judgment, ownership, reflection.
+    - Should NOT depend on domain-specific jargon.
+    - Should be answerable without tools or specialized terminology.
 
   Situational:
-    - realistic workplace scenarios
-    - prioritization, trade-offs, ambiguity handling, decision logic
+    - Realistic ambiguity, prioritization, decision logic.
 
   Specific:
-    - tools, debugging, implementation steps, validation logic, concrete workflow
+    - Concrete workflow, applied fundamentals, junior execution scope.
 
-  If multiple questions violate type or level constraints → verdict=FAIL and score ≤ 60.
+  If a few questions slightly stretch scope:
+    moderate deduction
+  If multiple clearly violate level:
+    verdict = FAIL and score ≤ 60
 
   ------------------------------------------------
-  4) DIMENSION UNIQUENESS (GROUP-LEVEL)
+  4) DIMENSION UNIQUENESS (GROUP LEVEL)
   ------------------------------------------------
   Across the full question set:
-  - Each Question ID must target a DISTINCT competency dimension.
-  - Penalize reworded duplicates heavily.
+  - Each Question ID must target a distinct competency dimension.
+  - Avoid reworded duplicates.
 
-  Explicit duplication patterns to watch:
-  - Multiple motivation questions framed differently
-  - Repeated teamwork/conflict questions
-  - Repeated debugging or metric-selection questions
-  - Same competency tested with surface rewording
+  Penalize proportionally:
+    - Minor thematic similarity → small deduction
+    - Clear overlap in 2 questions → moderate deduction
+    - Repeated dimension pattern → score ≤ 65
 
-  Scoring:
-  - Near-duplicate pair → verdict=FAIL and score ≤ 60.
-  - Strong overlap across 2+ questions → score ≤ 65.
+  Only FAIL if duplication is severe and systemic.
 
   ------------------------------------------------
-  5) ANSWER QUALITY & DIFFERENTIATION (PER-QUESTION)
+  5) ANSWER QUALITY & DIFFERENTIATION
   ------------------------------------------------
   For EACH question:
-  - Good answer: structured, concrete, junior-realistic, shows reasoning.
-  - Mid answer: plausible but partially generic or missing depth.
-  - Bad answer: clearly weak, vague, incorrect, or misaligned.
 
-  Checks:
-  - Good/Mid/Bad must be meaningfully differentiated.
-  - Good answer must include specific actions/examples (not opinion-only).
-  - Answers must not be trivially short.
-  - Bad answer must clearly illustrate failure.
+  Good:
+    - Concrete
+    - Structured
+    - Junior-realistic
+    - Demonstrates reasoning and reflection
 
-  If differentiation weak across multiple questions → score ≤ 70.
+  Mid:
+    - Partially structured
+    - Some detail but limited depth
 
-  ------------------------------------------------
-  6) RUBRIC QUALITY (PER-QUESTION)
-  ------------------------------------------------
-  Each grading_rubrics must contain clearly labeled sections (as plain text):
-  - Question intent check:
-  - Structure check:
-  - Depth check:
-  - Clarity check:
-  - Relevance to role:
+  Bad:
+    - Clearly weak, vague, defensive, or misaligned
 
   Evaluate:
-  - Must be specific to THIS question (not generic interview advice).
-  - Must explain what distinguishes Good vs Mid vs Bad using those checks.
-  - Should mention STAR when relevant (Behavioral).
-  - Must be actionable and diagnostic.
+  - Clear differentiation between Good/Mid/Bad
+  - Good answer includes specific actions (not just opinion)
+  - Bad answer clearly illustrates failure pattern
+  - Answers are not extremely short
 
-  If multiple rubrics are generic templates → score ≤ 75.
+  If multiple questions lack differentiation:
+    score ≤ 75
 
   ------------------------------------------------
-  REQUIRED OUTPUT (JudgeResult)
+  6) RUBRIC QUALITY
   ------------------------------------------------
-  Return JSON ONLY with:
+  Each grading_rubrics must include:
+    - Question intent check:
+    - Structure check:
+    - Depth check:
+    - Clarity check:
+    - Relevance to role:
+
+  Evaluate:
+  - Sections present and clearly labeled
+  - Rubric references THIS question (not generic template)
+  - Explains how Good vs Mid vs Bad differ
+  - Mentions STAR when relevant (Behavioral)
+
+  Minor generalization → small deduction
+  Multiple generic rubrics → score ≤ 75
+
+  ------------------------------------------------
+  REQUIRED OUTPUT
+  ------------------------------------------------
+  Return JSON ONLY:
   - verdict: "PASS" or "FAIL"
   - score: integer 0-100
-  - reasons: list of 1-5 diagnostic strings
+  - reasons: 1-5 concise diagnostic strings
 
-  Reasons MUST be specific and reference IDs where possible.
-  Good examples:
-  - "Missing question_ids: ['3','5']"
-  - "Duplicate question_id: '4'"
-  - "Extra question_ids: ['9']"
-  - "Non-interrogative question_id='2' (missing '?')"
-  - "Schema extra keys at questions[1]: ['notes']"
-  - "Near-duplicate dimensions: question_id='4' vs question_id='5'"
+  Reasons must be short and specific.
+  Reference question_id when applicable.
 
-  IMPORTANT:
-  - If verdict=FAIL, include the most critical structural reason(s) first.
-  - Keep reasons short (one line each). No paragraphs.
+  Examples:
+  - "Missing question_ids: ['3']"
+  - "Duplicate question_id='4'"
+  - "Non-interrogative question_id='2'"
+  - "Behavioral question_id='1' includes domain-specific jargon"
+  - "Near-duplicate dimension: question_id='4' vs '5'"
 
-  ------------------------------------------------
-  GENERATION SCHEMA
-  {llm_schema}
+  If verdict=FAIL:
+    - List the most critical structural issue first.
 
-  INPUT CONTEXT
-  {context}
-
-  GENERATED OUTPUT JSON
-  {output_json}
-
-  FINAL RULE
-  Return JSON ONLY in the JudgeResult shape: verdict, score, reasons.
+  FINAL RULE:
+  Return JSON ONLY with verdict, score, reasons.

@@ -165,7 +165,7 @@ def generate_with_optional_judge(
                 raise RuntimeError("judge_prompt_path provided but judge_model is None")
 
             judge_vars = {
-                "context": augmented_context,
+                "context": context,
                 "llm_schema": llm_schema_text,
                 "output_json": json.dumps(gen_obj.model_dump(), ensure_ascii=False, sort_keys=True),
             }
@@ -200,7 +200,7 @@ def generate_with_optional_judge(
                 )
 
             # judge failed -> retry with feedback appended (deterministic, bounded)
-            augmented_context = _append_judge_feedback(context, feedback)
+            augmented_context = _append_judge_feedback(augmented_context, feedback)
             last_error = f"Judge failed: {feedback or '(no feedback)'}"
 
             if attempt == max_retries_outer:

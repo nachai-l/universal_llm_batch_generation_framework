@@ -4,52 +4,56 @@ from pydantic import ConfigDict
 
 class LLMOutput(BaseModel):
     """
-    Schema for the translated interview question content.
-    Represents the output of the bilingual translation engine.
+    Represents the translated interview question content.
+    Includes the question, example answers across three quality tiers, and grading rubrics.
     """
     model_config = ConfigDict(extra="forbid")
 
+    id: str = Field(
+        ..., 
+        description="The unique identifier of the record, preserved from the input."
+    )
     question_name: str = Field(
         ..., 
-        description="The translated interview question name, maintaining interrogative format."
+        description="The translated question text in Thai. Must end with a question mark."
     )
     example_answer_good: str = Field(
         ..., 
-        description="The translated high-quality example answer."
+        description="The translated high-quality example answer in Thai."
     )
     example_answer_mid: str = Field(
         ..., 
-        description="The translated medium-quality example answer."
+        description="The translated average-quality example answer in Thai."
     )
     example_answer_bad: str = Field(
         ..., 
-        description="The translated low-quality example answer."
+        description="The translated low-quality example answer in Thai."
     )
     grading_rubrics: str = Field(
         ..., 
-        description="The translated grading rubrics, preserving specific section headers and structure."
+        description="The translated grading rubrics in Thai, preserving specific English section labels."
     )
 
 class JudgeResult(BaseModel):
     """
-    Schema for the judge's evaluation of the LLM output.
-    Used to validate the quality and adherence to instructions.
+    Represents the evaluation result of an LLM-generated translation.
+    Used to determine if the output meets the quality and structural requirements.
     """
     model_config = ConfigDict(extra="forbid")
 
     verdict: Literal["PASS", "FAIL"] = Field(
         ..., 
-        description="The final evaluation outcome."
+        description="The final decision on whether the output meets all criteria."
     )
     score: int = Field(
         ..., 
         ge=0, 
         le=100, 
-        description="A quality score from 0 to 100."
+        description="A quality score from 0 to 100 based on translation accuracy and constraint following."
     )
     reasons: List[str] = Field(
         default_factory=list, 
-        description="List of justifications for the verdict and score."
+        description="A list of specific observations or violations justifying the verdict."
     )
 
 __all__ = ["LLMOutput", "JudgeResult"]

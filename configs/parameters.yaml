@@ -14,8 +14,8 @@ run:
 # Input table configuration (Pipeline 2)
 # ------------------------------------------------------------
 input:
-  path: raw_data/input.csv
-  format: csv                       # csv | psv | tsv | xlsx
+  path: raw_data/tobe_translate.psv # raw_data/input.csv          #
+  format: psv # csv #               # csv | psv | tsv | xlsx
   encoding: utf-8
   sheet: null
 
@@ -30,7 +30,7 @@ input:
 grouping:
   # If false: process each input row independently (1 row -> 1 output).
   # If true: group rows by `column` and build context per group.
-  enabled: false # true
+  enabled: false # true #
 
   # Column name used to form groups (exact match after header trimming).
   # Required when enabled=true.
