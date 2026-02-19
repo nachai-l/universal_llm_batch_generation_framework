@@ -1,31 +1,67 @@
 # Universal LLM Batch Generation Framework
 
-> A deterministic, schema-driven, judge-gated LLM batch processing framework.  
-> End-to-end verified (Pipelines 0–6) · Strict schema validation · Artifact-level caching · Reproducible exports · 236 tests passing
+> A deterministic, schema-driven, judge-gated LLM batch processing framework.
+> End-to-end verified (Pipelines 0–6) · Strict schema validation · Artifact-level caching · Reproducible exports · 236+ tests passing
 
-A **universal, task-agnostic LLM batch generation framework** that ingests a tabular input file, builds deterministic work units, runs LLM generation with strict schema validation, optionally applies a judge-gated acceptance step, and exports analysis-ready outputs with a human-readable report.
+A **universal, task-agnostic LLM batch generation framework** that ingests a tabular input file, builds deterministic work units, runs LLM generation with strict runtime schema validation, optionally applies a judge-gated acceptance step, and exports analysis-ready outputs with a human-readable audit report.
 
----
+This framework is built to eliminate common LLM batch-processing risks:
 
-## What This Framework Does
+* Non-deterministic reruns
+* Silent schema drift
+* Invalid outputs silently passing downstream
+* Untraceable failures
+* Cache corruption across task evolution
 
-- Ingests **one** tabular file (`csv / psv / tsv / xlsx`)
-- Builds deterministic **WorkItems** (row-wise or grouped)
-- Runs LLM generation with **strict schema validation** (Pydantic v2, `extra="forbid"`)
-- Optionally runs a **judge** prompt with automatic retry and feedback injection
-- Exports results to `jsonl` (full canonical) + `psv` (thin, spreadsheet-friendly)
-- Writes a **report** (`md` + `html`) summarising run health and quality
-
-Designed for:
-
-- **Reproducibility** — hashing, stable ordering, stable serialisation
-- **Auditability** — artifact-first, manifest-first, nothing implicit
-- **Scalability** — parallel execution, cache hits, group-context de-duplication
-- **Forward-compatibility** — schema and prompt evolution without corrupting prior runs
+It enforces structure, traceability, and reproducibility at every stage.
 
 ---
 
-## Project Structure
+# What This Framework Does
+
+The framework performs the following deterministic execution pipeline:
+
+1. Ingest a single structured tabular file (`csv / psv / tsv / xlsx`)
+2. Normalize and snapshot the input deterministically
+3. Build stable WorkItems (row-wise or grouped)
+4. Generate structured outputs via LLM
+5. Validate outputs strictly against a runtime Pydantic v2 schema
+6. Optionally judge the outputs and retry if necessary
+7. Export canonical JSONL + thin PSV tables
+8. Produce an audit report (Markdown + HTML)
+
+### Core Guarantees
+
+* **Strict Schema Enforcement** — Pydantic v2 with `extra="forbid"`
+* **Deterministic Hashing** — stable `work_id`, `group_context_id`, `cache_id`
+* **Cache Discipline** — identical inputs never re-spend tokens
+* **Artifact Transparency** — every stage writes inspectable files
+* **Safe Retry Loop** — corrective prefix injection on validation failure
+* **Forward-Compatible Evolution** — schema or prompt changes produce new cache keys
+
+---
+
+# Design Philosophy
+
+This framework is built on the principle that:
+
+> LLM generation must behave like a deterministic data pipeline, not an interactive chat tool.
+
+To achieve this:
+
+* Pipelines are orchestration-only.
+* Business logic lives in `functions/core/`.
+* Artifacts are the source of truth.
+* Schema is the contract.
+* Judge never mutates content.
+* Cache keys include semantic configuration components.
+
+The runtime schema (`llm_schema.py`) is the authoritative contract.
+The prompt schema (`llm_schema.txt`) is derived from it and must never diverge.
+
+---
+
+# Project Structure
 
 ```
 .
@@ -34,8 +70,8 @@ Designed for:
 │
 ├── prompts/                        # YAML prompt templates
 │   ├── schema_auto_py_generation.yaml
-│   ├── generation_prompt.yaml
-│   └── judge_prompt.yaml
+│   ├── generation.yaml
+│   └── judge.yaml
 │
 ├── schema/
 │   ├── llm_schema.py              # Runtime validation schema (Pydantic v2)
@@ -82,136 +118,153 @@ Designed for:
 └── archived/                      # Timestamped schema archives
 ```
 
----
+### Key Directories Explained
 
-## Pipeline Overview
-
-```
-[0] schema_ensure      → schema/llm_schema.py
-[1] schema_txt_ensure  → schema/llm_schema.txt
-[2] ingest_input       → artifacts/cache/pipeline2_input.json
-[3] build_requests     → artifacts/cache/pipeline3_work_items.json
-[4] llm_generate       → artifacts/cache/llm_outputs/* + pipeline4_manifest.json
-[5] export_outputs     → artifacts/outputs/output.jsonl + output.psv
-[6] write_report       → artifacts/reports/report.md + report.html
-```
-
-Each pipeline is independently runnable. Each writes a manifest. No pipeline contains business logic — all logic lives in `functions/core/`.
+* `functions/core/` — deterministic domain logic (fully unit-testable)
+* `functions/batch/` — thin pipeline entrypoints
+* `artifacts/cache/` — validated LLM outputs + manifests + failure dumps
+* `artifacts/outputs/` — canonical user-facing exports
+* `archived/` — timestamped schema history for evolution traceability
 
 ---
 
-## Pipelines in Detail
+# Pipeline Overview
 
-### Pipeline 0 — Schema (Python) Ensure
-
-Ensures a valid, importable **Pydantic v2 schema module** (`schema/llm_schema.py`) exists before any generation runs.
-
-- If schema exists and `force_regenerate: false` → no-op
-- If missing or `force_regenerate: true`:
-  - Archives existing schema (timestamped)
-  - Generates schema via LLM prompt
-  - Post-processes code: injects `ConfigDict(extra="forbid")` into all `BaseModel` subclasses
-  - Validates: syntactically valid Python, importable, contains at least one `BaseModel`
-
-### Pipeline 1 — Schema (Text) Ensure
-
-Converts the Python schema into **prompt-injectable JSON schema text** (`schema/llm_schema.txt`).
-
-- Derived from the Pydantic v2 model via introspection (never hand-written)
-- Enforces `additionalProperties: false`
-- Guarantees prompt contract matches runtime validation
-
-### Pipeline 2 — Input Ingestion
-
-Reads the raw input table and writes a **deterministic JSON snapshot** (`pipeline2_input.json`).
-
-- Supports: `csv`, `tsv`, `psv`, `xlsx`
-- All values read as strings (no implicit type coercion)
-- Null tokens normalised: `None`, `NaN`, `n/a`, `NULL`, `[None]` → `""`
-- Internal whitespace and newlines collapsed deterministically
-
-### Pipeline 3 — Build WorkItems
-
-Converts the ingested snapshot into **deterministic WorkItems** — the unit of LLM work.
-
-**Supported modes:**
-
-| Mode | Description |
-|------|-------------|
-| Row-wise | 1 input row → 1 WorkItem |
-| Group output | 1 group → 1 WorkItem (LLM sees all group rows) |
-| Row output with group context | Group context built once; each row → 1 WorkItem referencing shared context |
-
-**Group context de-duplication:** unique group contexts stored once, referenced by stable `group_context_id` (SHA1 of context content). Eliminates artifact bloat at scale.
-
-**Stable IDs:** `work_id` and `group_context_id` are deterministic across repeated runs for the same data and config.
-
-### Pipeline 4 — LLM Generation (+ Optional Judge)
-
-Executes LLM generation per WorkItem with full validation and optional judge-gating.
-
-**Workflow:**
-1. Compute deterministic `cache_id` per WorkItem
-2. Cache pre-scan — skip if success artifact exists and `cache.force: false`
-3. Run generation prompt
-4. Validate strictly against runtime schema (Pydantic v2, `extra="forbid"`)
-5. Optional judge: if verdict fails, inject feedback and retry; only judge-approved outputs are persisted
-6. Write success artifact or attempt-scoped failure dump
-7. Write `pipeline4_manifest.json`
-
-**Parallel execution:** ThreadPoolExecutor (`llm.max_workers`). Determinism preserved by stable ordering and stable cache IDs.
-
-**Cache key** (SHA1 over):
 ```
-work_id + prompt_sha + schema_sha + model_name + temperature + judge_enabled + judge_prompt_sha
+[0] schema_ensure
+[1] schema_txt_ensure
+[2] ingest_input
+[3] build_requests
+[4] llm_generate
+[5] export_outputs
+[6] write_report
 ```
 
-### Pipeline 5 — Export Outputs
+Each pipeline:
 
-Exports validated artifacts to user-facing formats.
-
-**Core logic** is in `functions/core/export_outputs.py` (zero file IO, fully testable). The pipeline entrypoint is thin orchestration only.
-
-**Outputs:**
-- `output.jsonl` — full canonical records, always complete, never lossy
-- `output.psv` — thin table, heavy columns excluded by default
-
-**Thin PSV (default):**
-Columns excluded from PSV by default (always present in JSONL):
-
-- `group_rows_json`, `group_context_id`, `group_context`, `group_context_meta_json`, `questions_json`
-
-**PSV column ordering (deterministic):**
-1. Input columns (source order)
-2. Group helper columns (if enabled)
-3. Parsed fields (alphabetical)
-4. Judge + meta columns (fixed order)
-
-**PSV escape contract:**
-
-| Character | Escaped as |
-|-----------|------------|
-| Newline | `\n` |
-| Tab | `\t` |
-| Pipe | `\|` |
-| `None` | `""` |
-
-Consumers must unescape these sequences when reading cell values.
-
-**Parsed field collision resolution:** if a parsed field name collides semantically with an input column header (e.g. parsed `question_id` vs input `Question ID`), the parsed field is auto-prefixed with `parsed_` to preserve both without silent overwrite.
-
-### Pipeline 6 — Report Generation
-
-Generates a human-readable run report (`report.md` + `report.html`) covering:
-
-- Run metadata, config, and artifact paths
-- Volume stats and distributions (by group, question type, etc.)
-- Judge performance: pass/fail counts, score distribution, top reasons
-- Data quality checks: missing inputs, missing meta, invalid judge records
-- Spot-check samples per group
+* Is independently runnable
+* Writes a manifest
+* Does not silently overwrite artifacts
+* Is deterministic given unchanged inputs
 
 ---
 
+# Detailed Pipeline Behavior
+
+## Pipeline 0 — Schema Ensure
+
+Ensures a valid, importable Pydantic schema exists.
+
+If auto-generate enabled:
+
+* Archives previous schema
+* Generates new one via LLM
+* Injects `ConfigDict(extra="forbid")`
+* Validates importability and BaseModel presence
+
+This prevents schema drift and silent validation gaps.
+
+---
+
+## Pipeline 1 — Schema Text Ensure
+
+Generates JSON-schema text from runtime schema.
+
+This ensures:
+
+* Prompt contract matches runtime validator
+* No hand-maintained duplication
+* Strict `additionalProperties: false`
+
+---
+
+## Pipeline 2 — Input Ingestion
+
+* All values treated as strings
+* Null tokens normalized
+* Whitespace normalized
+* Stable snapshot written to `pipeline2_input.json`
+
+This snapshot guarantees reproducibility across reruns.
+
+---
+
+## Pipeline 3 — WorkItem Construction
+
+Supports three modes:
+
+| Mode                          | Description                            |
+| ----------------------------- | -------------------------------------- |
+| row                           | 1 row → 1 LLM call                     |
+| group_output                  | 1 group → 1 LLM call                   |
+| row_output_with_group_context | 1 group context → multiple row outputs |
+
+Group context is hashed and de-duplicated.
+
+Stable IDs ensure:
+
+* Identical runs → identical `work_id`
+* Context changes → new IDs
+
+---
+
+## Pipeline 4 — LLM Generation
+
+For each WorkItem:
+
+1. Compute deterministic `cache_id`
+2. Pre-scan cache
+3. Generate output
+4. Extract JSON
+5. Validate schema
+6. Optional judge validation
+7. Persist artifact
+8. Write manifest
+
+Cache key includes:
+
+```
+work_id
+prompt_sha
+schema_sha
+model_name
+temperature
+judge_enabled
+judge_prompt_sha
+```
+
+Any semantic change automatically invalidates cache safely.
+
+---
+
+## Pipeline 5 — Export
+
+Outputs:
+
+* `output.jsonl` — full canonical record
+* `output.psv` — thin export (spreadsheet-friendly)
+
+PSV characteristics:
+
+* Deterministic column order
+* Escaped newline, tab, pipe
+* No silent overwrites on field collisions
+
+---
+
+## Pipeline 6 — Reporting
+
+Generates:
+
+* Run statistics
+* Group distributions
+* Judge pass/fail summary
+* Failure diagnostics
+* Spot-check samples
+
+Designed for audit and quality monitoring.
+
+---
 ## Configuration
 
 All parameters live in `configs/parameters.yaml` (typed and validated via Pydantic v2).
@@ -230,7 +283,7 @@ grouping:
   max_rows_per_group: 50
 
 llm:
-  model: gemini-3-flash-preview
+  model_name: gemini-3-flash-preview
   temperature: 1.0
   max_workers: 10
   retries: 5
@@ -247,59 +300,7 @@ outputs:
   psv_path: artifacts/outputs/output.psv
   # thin PSV by default
 ```
-
 ---
-
-## Why This Framework Exists
-
-Most LLM batch scripts are:
-
-- Non-deterministic across runs
-- Lacking schema enforcement (outputs accepted blindly)
-- Without cache discipline (re-run = re-spend)
-- Impossible to audit (no artifacts, no manifests)
-- Unsafe to rerun (overwrites, data loss)
-
-This framework solves that by making every concern explicit:
-
-| Problem | Solution |
-|---------|----------|
-| Non-deterministic outputs | Stable hashing, ordering, and serialisation throughout |
-| No schema enforcement | Pydantic v2 `extra="forbid"` — invalid outputs never become artifacts |
-| No cache discipline | SHA1 cache keys — identical inputs always hit cache |
-| No auditability | Every stage writes a manifest; artifacts are never implicitly deleted |
-| Judge contamination | Judge runs post-validation; only approved outputs are persisted |
-| Schema drift over time | Prompt schema derived from runtime schema — always in sync |
-
----
-
-## Who This Is For
-
-This framework is suitable for any task that maps tabular input rows to structured LLM-generated outputs:
-
-- Interview question generation (per role / seniority / competency)
-- Structured extraction from documents or job descriptions
-- Educational content generation (CLO/skill alignment)
-- Batch evaluation and scoring workflows
-- Research dataset generation
-- LLM output benchmarking
-- Any task requiring reproducible, auditable batch generation at scale
-
----
-
-## Design Principles
-
-1. **Pipelines are orchestration-only.** No business logic in pipeline entrypoints.
-2. **Artifacts are the source of truth.** Every stage writes inspectable output. Nothing is implicit.
-3. **Determinism everywhere.** Stable ordering, serialisation, hashing, and IDs.
-4. **Schema is the contract.** Runtime schema is authoritative; prompt schema is derived from it.
-5. **LLM output never bypasses validation.** Strict Pydantic v2, `extra="forbid"`.
-6. **Judge does not poison cache.** Only judge-approved outputs are persisted as final.
-7. **Forward-compatibility.** Schema/prompt changes produce new cache IDs; old runs are never corrupted.
-8. **Manifest-first traceability.** Every pipeline writes a manifest with counts, modes, and anomalies.
-
----
-
 ## Running the Framework
 
 Run all pipelines end-to-end (force re-execution):
@@ -329,52 +330,245 @@ pytest -q
 
 ---
 
-## Determinism Guarantees
+# 🔄 How to Prepare a New Use Case
 
-If the following are unchanged between runs:
-
-- Input file content
-- `configs/parameters.yaml`
-- `schema/llm_schema.py`
-- Prompt files
-- Model name and temperature
-
-Then the following are guaranteed identical:
-
-- All `work_id` and `group_context_id` values
-- All `cache_id` values (same inputs always hit cache)
-- Export column ordering in PSV
-- JSON serialisation order
-- Manifest counts
-
-This means reruns with warm cache are always zero-cost and produce byte-identical outputs.
+The framework is task-agnostic.
+To introduce a new workflow (generation, translation, extraction, scoring, evaluation):
 
 ---
 
-## Status
+## Step 1 — Prepare Input File
 
-**Framework v1 — Operational ✅**
+Update:
 
-| Item | State |
-|------|-------|
-| Pipelines 0–6 | Complete, `rc=0` |
-| Strict schema validation | Enforced (`extra="forbid"`) |
-| Judge gating | Working (auto-retry with feedback) |
-| Artifact-level cache | Stable |
-| Thin PSV export | Verified (50 rows × 22 cols) |
-| JSONL canonical export | Verified (50 rows, full records) |
-| Test suite | 236 tests passing, 0 failures |
-| Real execution | End-to-end verified |
+```
+raw_data/input.csv
+```
+
+Guidelines:
+
+* Include only required columns.
+* Remove judge/meta fields if chaining.
+* All values treated as strings.
+* Ensure column names exactly match configuration.
+
+If chaining from previous output:
+
+* Use `output.psv` or `output.jsonl`
+* Remove heavy JSON columns unless required
+* Validate grouping column presence
 
 ---
 
-## Requirements
+## Step 2 — Update parameters.yaml
 
-- Python 3.12+
-- pandas
-- pydantic >= 2.0
-- PyYAML
-- google-genai (Gemini SDK)
+Key areas to verify:
+
+### Input
+
+```yaml
+input:
+  path:
+  format:
+```
+
+### Grouping
+
+```yaml
+grouping:
+  enabled:
+  column:
+  mode:
+```
+
+### LLM
+
+```yaml
+llm:
+  model_name:
+  temperature:
+```
+
+### Cache
+
+If task semantics changed:
+
+```yaml
+cache:
+  force: true
+```
+
+or clear cache manually.
+
+---
+
+## Step 3 — Update generation.yaml
+
+Requirements:
+
+* Must inject `{llm_schema}`
+* Must enforce JSON-only output
+* Must match schema exactly
+* Must not echo schema
+* Must not include markdown
+
+Maintain HARD OUTPUT CONTRACT block.
+
+---
+
+## Step 4 — Update judge.yaml (If Enabled)
+
+Judge must:
+
+* Match grouping mode
+* Match schema
+* Return EXACT shape:
+
+```json
+{
+  "verdict": "PASS",
+  "score": 85,
+  "reasons": []
+}
+```
+
+Disable judge for pure transformations if evaluation unnecessary.
+
+---
+
+## Step 5 — Update Schema
+
+### Auto-Generate (Recommended)
+
+```yaml
+llm_schema:
+  auto_generate: true
+  force_regenerate: true
+```
+
+Run Pipeline 0.
+
+### Manual Update
+
+If editing manually:
+
+* Must use Pydantic v2
+* Must include `ConfigDict(extra="forbid")`
+* Must match generation.yaml exactly
+
+Skip Pipeline 0 only if schema is already correct.
+
+---
+
+## Step 6 — Run Pipelines
+
+Full run:
+
+```bash
+python scripts/run_pipeline_0_force.py
+...
+python scripts/run_pipeline_6_force.py
+```
+
+You may start from later pipeline if earlier stages unchanged.
+
+---
+
+## Step 7 — Validate Outputs
+
+Outputs:
+
+```
+artifacts/outputs/output.jsonl
+artifacts/outputs/output.psv
+```
+
+Reports:
+
+```
+artifacts/reports/report.md
+artifacts/reports/report.html
+```
+
+Review:
+
+* Schema correctness
+* Judge performance
+* Field completeness
+* Unexpected truncations
+* Group coverage
+
+---
+
+# 🔗 Chaining Workflows
+
+Example:
+
+1. Generate interview questions
+2. Export output
+3. Feed into translation workflow
+4. Judge translation quality
+5. Aggregate results
+
+Best Practices:
+
+* Remove unnecessary JSON columns
+* Validate schema before each new run
+* Clear cache when semantic meaning changes
+* Maintain versioned prompts per use case
+
+---
+
+# When Must Schema Be Regenerated?
+
+Regenerate when:
+
+* Fields added or removed
+* Field names changed
+* Structure changed
+* Nested model changed
+* Grouping logic affects output shape
+* Task type changed (generation → translation)
+
+Do NOT regenerate when:
+
+* Only input rows changed
+* Only wording refined
+* Only judge logic changed
+
+---
+
+# Determinism Guarantees
+
+If unchanged:
+
+* Input file
+* parameters.yaml
+* schema
+* prompts
+* model name
+* temperature
+
+Then guaranteed identical:
+
+* work_id
+* group_context_id
+* cache_id
+* JSONL
+* PSV
+* manifests
+
+Warm cache reruns are byte-identical and zero-cost.
+
+---
+
+# Requirements
+
+* Python 3.12+
+* pandas
+* pydantic >= 2
+* PyYAML
+* google-genai
 
 ```bash
 pip install -r requirements.txt
@@ -382,8 +576,21 @@ pip install -r requirements.txt
 
 ---
 
-## Notes
+# Final Note
 
-- Raw input data and credentials are excluded from version control.
-- The framework is fully dataset-agnostic — swap in any tabular input and prompt.
-- Designed for **reproducible batch generation, auditing, and analysis**.
+This is not a script.
+It is a deterministic LLM batch execution engine.
+
+Swap input.  
+Swap schema.  
+Swap prompt.  
+
+The engine remains stable.
+
+Designed for:
+
+* Reproducible generation
+* Auditable workflows
+* Safe iteration
+* Scalable evaluation
+* Structured LLM experimentation
