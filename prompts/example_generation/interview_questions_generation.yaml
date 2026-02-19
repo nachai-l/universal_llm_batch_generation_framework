@@ -83,6 +83,10 @@ system: |
   - No enterprise design.
   - No leadership of large teams.
   - No strategic roadmap ownership.
+  - No stakeholder strategy ownership.
+  - No budget ownership.
+  - No hiring, performance management, or team leadership decisions.
+  - No cross-department governance decisions.
   - Focus on internships, academic projects, applied fundamentals, and execution.
 
   INTERNAL VALIDATION BEFORE RETURNING
@@ -149,7 +153,6 @@ user: |
         • shifting priorities
         • managing stakeholder expectations
         • responding under pressure
-    - Do NOT mention the job/role name.
 
   Specific (Role Workflow & Applied Fundamentals)
     - May include tools, workflows, domain processes, and execution steps.
@@ -162,7 +165,6 @@ user: |
         • troubleshooting logic
         • organizing work artifacts
         • evaluating quality of output
-    - Do NOT mention the job/role name.
 
   EXAMPLE DIMENSION DISTRIBUTION (DO NOT COPY)
     - Resolving a team disagreement

@@ -2,10 +2,10 @@
   "models": {
     "JudgeResult": {
       "additionalProperties": false,
-      "description": "Represents the evaluation result of an LLM-generated translation.\nUsed to determine if the output meets the quality and structural requirements.",
+      "description": "Represents the evaluation result from a judge model assessing translation quality.",
       "properties": {
         "reasons": {
-          "description": "A list of specific observations or violations justifying the verdict.",
+          "description": "A list of specific justifications or violations found during evaluation.",
           "items": {
             "type": "string"
           },
@@ -13,14 +13,14 @@
           "type": "array"
         },
         "score": {
-          "description": "A quality score from 0 to 100 based on translation accuracy and constraint following.",
+          "description": "A numerical quality score from 0 to 100.",
           "maximum": 100,
           "minimum": 0,
           "title": "Score",
           "type": "integer"
         },
         "verdict": {
-          "description": "The final decision on whether the output meets all criteria.",
+          "description": "The final judgment on whether the output meets all strict requirements.",
           "enum": [
             "PASS",
             "FAIL"
@@ -38,42 +38,48 @@
     },
     "LLMOutput": {
       "additionalProperties": false,
-      "description": "Represents the translated interview question content.\nIncludes the question, example answers across three quality tiers, and grading rubrics.",
+      "description": "Represents the structured translation output for interview questions and rubrics.\nAll text fields are translated into Thai while maintaining professional tone and specific labels.",
       "properties": {
         "example_answer_bad": {
-          "description": "The translated low-quality example answer in Thai.",
+          "description": "The translated low-quality sample answer.",
           "title": "Example Answer Bad",
           "type": "string"
         },
         "example_answer_good": {
-          "description": "The translated high-quality example answer in Thai.",
+          "description": "The translated high-quality sample answer.",
           "title": "Example Answer Good",
           "type": "string"
         },
         "example_answer_mid": {
-          "description": "The translated average-quality example answer in Thai.",
+          "description": "The translated average-quality sample answer.",
           "title": "Example Answer Mid",
           "type": "string"
         },
         "grading_rubrics": {
-          "description": "The translated grading rubrics in Thai, preserving specific English section labels.",
+          "description": "The translated grading criteria. Preserves English labels for specific rubric sections.",
           "title": "Grading Rubrics",
           "type": "string"
         },
-        "id": {
-          "description": "The unique identifier of the record, preserved from the input.",
-          "title": "Id",
+        "question_id": {
+          "description": "The unique identifier for the question, kept unchanged from input.",
+          "title": "Question Id",
           "type": "string"
         },
         "question_name": {
-          "description": "The translated question text in Thai. Must end with a question mark.",
+          "description": "The translated interview question. Must end with a question mark (?).",
           "title": "Question Name",
+          "type": "string"
+        },
+        "role_level": {
+          "description": "The role level description (e.g., Junior, Senior), kept in English as per requirements.",
+          "title": "Role Level",
           "type": "string"
         }
       },
       "required": [
-        "id",
+        "question_id",
         "question_name",
+        "role_level",
         "example_answer_good",
         "example_answer_mid",
         "example_answer_bad",
