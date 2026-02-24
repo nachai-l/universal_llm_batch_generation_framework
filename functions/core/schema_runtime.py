@@ -54,6 +54,14 @@ def resolve_schema_models(schema_py_path: str | Path) -> Tuple[Type[BaseModel], 
         if not isinstance(judge_model, type) or not issubclass(judge_model, BaseModel):
             raise RuntimeError("'JudgeResult' exists but is not a Pydantic BaseModel")
 
+    # Rebuild models to resolve deferred annotations (e.g. Literal, ForwardRef).
+    # Pass the module namespace so Pydantic can find types like Literal that
+    # were imported in the schema file but aren't in sys.modules (dynamic load).
+    ns = vars(mod)
+    gen_model.model_rebuild(_types_namespace=ns)
+    if judge_model is not None:
+        judge_model.model_rebuild(_types_namespace=ns)
+
     return gen_model, judge_model
 
 

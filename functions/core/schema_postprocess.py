@@ -299,6 +299,10 @@ def postprocess_schema_py(
         for cname in classes:
             code = _insert_model_config_into_class_block(code, cname)
 
+    # Ensure typing imports for common type constructs used by LLM-generated schemas
+    if re.search(r"\bLiteral\s*\[", code) and "import Literal" not in code:
+        code = _ensure_import(code, "from typing import Literal")
+
     code = _ensure___all__(code, required_exports)
 
     return code
