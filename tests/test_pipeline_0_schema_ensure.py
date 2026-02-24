@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 import functions.batch.pipeline_0_schema_ensure as p0
+from functions.core.schema_postprocess import validate_schema_ast
 
 
 def _write(tmp_path: Path, rel: str, content: str) -> Path:
@@ -375,9 +376,6 @@ def test_call_llm_generate_schema_write_cache_true_when_enabled(tmp_path: Path, 
 # validate_schema_ast – unit tests
 # ---------------------------------------------------------------------------
 
-from functions.core.schema_postprocess import validate_schema_ast  # noqa: E402
-
-
 def test_validate_schema_ast_accepts_valid_pydantic_code():
     """Happy path: clean pydantic-only code should pass without raising."""
     validate_schema_ast(VALID_SCHEMA_V2_LLMOUTPUT)  # must not raise
@@ -389,13 +387,20 @@ def test_validate_schema_ast_rejects_disallowed_import_and_eval():
     with pytest.raises(ValueError, match="Disallowed import"):
         validate_schema_ast("import os\nfrom pydantic import BaseModel\n")
 
-    # Dangerous builtin
+    # Dangerous name inside a class body (exercises the AST-walk name check)
     with pytest.raises(ValueError, match="Disallowed name"):
         validate_schema_ast(
             "from pydantic import BaseModel\n"
             "class M(BaseModel):\n"
             "    x: str\n"
-            "eval('rm -rf /')\n"  # top-level call with dangerous name
+            "    y: str = eval('secret')\n"  # eval as a default value expression
+        )
+
+    # Bare non-docstring expression at module level (exercises top-level Expr guard)
+    with pytest.raises(ValueError, match="Disallowed top-level construct"):
+        validate_schema_ast(
+            "from pydantic import BaseModel\n"
+            "print('side-effect')\n"  # top-level call — not a docstring
         )
 
 

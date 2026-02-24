@@ -11,8 +11,8 @@ Intent
 - Ensure __all__ contains required exports
 
 Design notes
-- Conservative text surgery (line-based)
-- No AST parsing (keeps dependency-free + simple)
+- Conservative text surgery (line-based) for fence stripping / ConfigDict injection
+- AST-based static safety check (validate_schema_ast) runs before execution
 """
 
 from __future__ import annotations
@@ -200,8 +200,14 @@ _ALLOWED_TOP_LEVEL_NODE_TYPES = (
     ast.ClassDef,
     ast.Assign,
     ast.AnnAssign,
-    ast.Expr,         # module-level docstrings (ast.Constant inside)
+    # ast.Expr is handled separately: only allowed when wrapping a string constant
+    # (i.e. a module-level docstring). Bare calls like print() or eval() are rejected.
 )
+
+
+def _is_docstring_expr(node: ast.AST) -> bool:
+    """Return True iff node is an ast.Expr whose value is a string constant."""
+    return isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
 
 
 def validate_schema_ast(code: str) -> None:
@@ -214,8 +220,9 @@ def validate_schema_ast(code: str) -> None:
     Rules enforced:
     - Only imports from __future__, typing, pydantic are allowed.
     - Dangerous builtins and module names are forbidden anywhere in the AST.
-    - Only imports, class definitions, assignments, and docstring expressions
-      are allowed at the top level (no function defs, no top-level calls, etc.).
+    - Only imports, class definitions, simple assignments, and module-level
+      docstrings are allowed at the top level (no function defs, no bare
+      expression statements other than string literals).
     """
     try:
         tree = ast.parse(code)
@@ -224,7 +231,7 @@ def validate_schema_ast(code: str) -> None:
 
     # --- top-level structure check ---
     for node in ast.iter_child_nodes(tree):
-        if not isinstance(node, _ALLOWED_TOP_LEVEL_NODE_TYPES):
+        if not isinstance(node, _ALLOWED_TOP_LEVEL_NODE_TYPES) and not _is_docstring_expr(node):
             raise ValueError(
                 f"Disallowed top-level construct: {type(node).__name__}. "
                 "Schema files may only contain imports, class definitions, "
