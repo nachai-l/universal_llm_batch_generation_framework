@@ -196,3 +196,41 @@ __all__ = ["LLMOutput"]
 def test_postprocess_noop_on_empty_input():
     assert postprocess_schema_py("") == ""
     assert postprocess_schema_py("   \n  ") == ""
+
+
+def test_postprocess_injects_literal_import_when_used():
+    raw = """
+from pydantic import BaseModel
+from typing import Optional
+
+class JudgeResult(BaseModel):
+    verdict: Literal["PASS", "FAIL"]
+    score: Optional[int] = None
+"""
+    out = postprocess_schema_py(raw, required_exports=("JudgeResult",))
+    assert "from typing import Literal" in out
+
+
+def test_postprocess_does_not_inject_literal_when_already_imported():
+    raw = """
+from pydantic import BaseModel
+from typing import Literal, Optional
+
+class JudgeResult(BaseModel):
+    verdict: Literal["PASS", "FAIL"]
+    score: Optional[int] = None
+"""
+    out = postprocess_schema_py(raw, required_exports=("JudgeResult",))
+    # Should not duplicate the import
+    assert out.count("from typing import Literal") == 1
+
+
+def test_postprocess_does_not_inject_literal_when_not_used():
+    raw = """
+from pydantic import BaseModel
+
+class LLMOutput(BaseModel):
+    name: str
+"""
+    out = postprocess_schema_py(raw, required_exports=("LLMOutput",))
+    assert "Literal" not in out
