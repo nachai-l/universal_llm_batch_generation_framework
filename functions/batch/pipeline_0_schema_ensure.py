@@ -26,7 +26,7 @@ from hashlib import sha1
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from functions.core.schema_postprocess import postprocess_schema_py
+from functions.core.schema_postprocess import postprocess_schema_py, validate_schema_ast
 from functions.utils.config import ensure_dirs, load_credentials, load_parameters
 from functions.utils.logging import get_logger
 
@@ -308,6 +308,11 @@ def main() -> int:
 
     if not py_code.strip():
         raise RuntimeError("LLM returned empty schema code.")
+
+    try:
+        validate_schema_ast(py_code)
+    except ValueError as exc:
+        raise RuntimeError(f"Generated schema failed static safety check: {exc}") from exc
 
     schema_path.parent.mkdir(parents=True, exist_ok=True)
     schema_path.write_text(py_code.strip() + "\n", encoding="utf-8")

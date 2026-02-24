@@ -17,6 +17,7 @@ Design notes
 
 from __future__ import annotations
 
+import ast
 import re
 from typing import Optional, Sequence
 
@@ -180,6 +181,88 @@ def _ensure___all__(code: str, required: Sequence[str]) -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# Static AST safety validator
+# ---------------------------------------------------------------------------
+
+_ALLOWED_IMPORT_MODULES: frozenset[str] = frozenset({"__future__", "typing", "pydantic"})
+
+_DANGEROUS_NAMES: frozenset[str] = frozenset({
+    "eval", "exec", "compile", "open", "__import__",
+    "os", "sys", "subprocess", "socket", "shutil",
+    "importlib", "builtins", "globals", "locals", "vars",
+    "getattr", "setattr", "delattr",
+})
+
+_ALLOWED_TOP_LEVEL_NODE_TYPES = (
+    ast.Import,
+    ast.ImportFrom,
+    ast.ClassDef,
+    ast.Assign,
+    ast.AnnAssign,
+    ast.Expr,         # module-level docstrings (ast.Constant inside)
+)
+
+
+def validate_schema_ast(code: str) -> None:
+    """
+    Static AST safety check for LLM-generated schema code.
+
+    Raises ValueError describing the first violation found. Must be called
+    BEFORE exec_module / importlib execution of the generated file.
+
+    Rules enforced:
+    - Only imports from __future__, typing, pydantic are allowed.
+    - Dangerous builtins and module names are forbidden anywhere in the AST.
+    - Only imports, class definitions, assignments, and docstring expressions
+      are allowed at the top level (no function defs, no top-level calls, etc.).
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as exc:
+        raise ValueError(f"Schema code has a syntax error: {exc}") from exc
+
+    # --- top-level structure check ---
+    for node in ast.iter_child_nodes(tree):
+        if not isinstance(node, _ALLOWED_TOP_LEVEL_NODE_TYPES):
+            raise ValueError(
+                f"Disallowed top-level construct: {type(node).__name__}. "
+                "Schema files may only contain imports, class definitions, "
+                "assignments, and module-level docstrings."
+            )
+
+    # --- full AST walk for import allowlist and dangerous names ---
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                root = alias.name.split(".")[0]
+                if root not in _ALLOWED_IMPORT_MODULES:
+                    raise ValueError(
+                        f"Disallowed import: 'import {alias.name}'. "
+                        f"Only {sorted(_ALLOWED_IMPORT_MODULES)} are permitted."
+                    )
+        elif isinstance(node, ast.ImportFrom):
+            module = (node.module or "").split(".")[0]
+            if module not in _ALLOWED_IMPORT_MODULES:
+                raise ValueError(
+                    f"Disallowed import: 'from {node.module} import ...'. "
+                    f"Only {sorted(_ALLOWED_IMPORT_MODULES)} are permitted."
+                )
+        elif isinstance(node, ast.Name) and node.id in _DANGEROUS_NAMES:
+            raise ValueError(
+                f"Disallowed name: '{node.id}'. "
+                "Schema code must not reference system-level builtins or modules."
+            )
+        elif (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in _DANGEROUS_NAMES
+        ):
+            raise ValueError(
+                f"Disallowed attribute access: '{node.value.id}.{node.attr}'."
+            )
+
+
 def postprocess_schema_py(
     raw_text: str,
     *,
@@ -214,4 +297,4 @@ def postprocess_schema_py(
     return code
 
 
-__all__ = ["extract_python_code", "postprocess_schema_py"]
+__all__ = ["extract_python_code", "postprocess_schema_py", "validate_schema_ast"]
