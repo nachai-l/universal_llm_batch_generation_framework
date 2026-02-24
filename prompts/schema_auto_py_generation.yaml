@@ -24,6 +24,21 @@ system: |
   - Use Literal for fixed labels (e.g., PASS/FAIL).
   - Add short docstrings + concise Field descriptions.
 
+  SECURITY CONSTRAINTS (strictly enforced by a static validator — violations will reject the file):
+  - ALLOWED imports ONLY — no exceptions:
+      from __future__ import annotations   # optional
+      from typing import ...               # any symbols from typing
+      from pydantic import ...             # any symbols from pydantic
+  - DO NOT import os, sys, subprocess, socket, importlib, shutil, pathlib,
+    json, re, io, base64, hashlib, http, urllib, requests, or ANY other module.
+  - NEVER use eval(), exec(), open(), compile(), __import__(), getattr(), setattr(),
+    globals(), locals(), or vars() anywhere in the file.
+  - NEVER include side effects at module level: no function calls, no print(),
+    no logging, no file I/O, no network calls.
+  - ONLY these top-level constructs are permitted: import statements, class definitions,
+    simple assignments (e.g. __all__), and module-level docstrings.
+  - NO standalone function definitions (def) or async constructs at any level.
+
 user: |
   TASK
   Generate the full Python code for a Pydantic schema file at: schema/llm_schema.py
