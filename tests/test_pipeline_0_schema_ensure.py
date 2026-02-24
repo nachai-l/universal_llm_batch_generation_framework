@@ -369,3 +369,60 @@ def test_call_llm_generate_schema_write_cache_true_when_enabled(tmp_path: Path, 
     assert captured.get("write_cache") is True
     assert captured.get("cache_dir") == "artifacts/cache"
     assert captured.get("dump_failures") is True
+
+
+# ---------------------------------------------------------------------------
+# validate_schema_ast – unit tests
+# ---------------------------------------------------------------------------
+
+from functions.core.schema_postprocess import validate_schema_ast  # noqa: E402
+
+
+def test_validate_schema_ast_accepts_valid_pydantic_code():
+    """Happy path: clean pydantic-only code should pass without raising."""
+    validate_schema_ast(VALID_SCHEMA_V2_LLMOUTPUT)  # must not raise
+
+
+def test_validate_schema_ast_rejects_disallowed_import_and_eval():
+    """validate_schema_ast must reject disallowed imports and dangerous names."""
+    # Disallowed import
+    with pytest.raises(ValueError, match="Disallowed import"):
+        validate_schema_ast("import os\nfrom pydantic import BaseModel\n")
+
+    # Dangerous builtin
+    with pytest.raises(ValueError, match="Disallowed name"):
+        validate_schema_ast(
+            "from pydantic import BaseModel\n"
+            "class M(BaseModel):\n"
+            "    x: str\n"
+            "eval('rm -rf /')\n"  # top-level call with dangerous name
+        )
+
+
+def test_main_rejects_schema_with_disallowed_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Pipeline must raise RuntimeError (not silently write) when the LLM
+    returns schema code that contains a disallowed import."""
+    monkeypatch.chdir(tmp_path)
+    _write(tmp_path, "prompts/schema_auto_py_generation.yaml", "prompt: make schema\n")
+
+    params = _mk_params(auto_generate=True, force_regenerate=False)
+    creds = _mk_creds()
+
+    monkeypatch.setattr(p0, "load_parameters", lambda *a, **k: params)
+    monkeypatch.setattr(p0, "load_credentials", lambda *a, **k: creds)
+    monkeypatch.setattr(p0, "ensure_dirs", lambda *a, **k: None)
+
+    # Simulate an LLM that sneaks in 'import os'
+    bad_schema = (
+        "import os\n"
+        "from pydantic import BaseModel\n"
+        "class LLMOutput(BaseModel):\n"
+        "    path: str = os.getcwd()\n"
+    )
+    monkeypatch.setattr(p0, "_call_llm_generate_schema", lambda *a, **k: bad_schema)
+
+    with pytest.raises(RuntimeError, match="static safety check"):
+        p0.main()
+
+    # Schema file must NOT have been written
+    assert not (tmp_path / "schema/llm_schema.py").exists()
