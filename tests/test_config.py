@@ -294,3 +294,46 @@ gemini:
     assert isinstance(creds, CredentialsConfig)
     assert creds.gemini.api_key_env == "GEMINI_API_KEY"
     assert creds.gemini.model_name == "gemini-3-flash-preview"
+
+
+def test_llm_runner_max_retries_default_is_none(tmp_path: Path):
+    p = _write(tmp_path, "parameters.yaml", """
+llm:
+  model_name: m
+  temperature: 1.0
+  max_retries: 5
+  timeout_sec: 60
+  max_workers: 1
+""")
+    params = load_parameters(p)
+    assert params.llm.runner_max_retries is None
+    assert params.llm.max_retries == 5
+
+
+def test_llm_runner_max_retries_explicit(tmp_path: Path):
+    p = _write(tmp_path, "parameters.yaml", """
+llm:
+  model_name: m
+  temperature: 1.0
+  max_retries: 5
+  runner_max_retries: 2
+  timeout_sec: 60
+  max_workers: 1
+""")
+    params = load_parameters(p)
+    assert params.llm.runner_max_retries == 2
+
+
+def test_llm_runner_max_retries_rejects_zero(tmp_path: Path):
+    p = _write(tmp_path, "parameters.yaml", """
+llm:
+  model_name: m
+  temperature: 1.0
+  max_retries: 3
+  runner_max_retries: 0
+  timeout_sec: 60
+  max_workers: 1
+""")
+    with pytest.raises(Exception) as e:
+        load_parameters(p)
+    assert "runner_max_retries" in str(e.value).lower()

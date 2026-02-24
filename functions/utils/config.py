@@ -160,6 +160,7 @@ class LLMConfig(BaseModel):
     model_name: str = "gemini-3-flash-preview"
     temperature: float = 1.0
     max_retries: int = 3
+    runner_max_retries: Optional[int] = None
     timeout_sec: int = 60
     max_workers: int = 10
     silence_client_lv_logs: bool = True
@@ -176,6 +177,13 @@ class LLMConfig(BaseModel):
     def _validate_positive_int(cls, v: int, info) -> int:
         if v <= 0:
             raise ValueError(f"llm.{info.field_name} must be > 0")
+        return v
+
+    @field_validator("runner_max_retries")
+    @classmethod
+    def _validate_runner_max_retries(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v <= 0:
+            raise ValueError("llm.runner_max_retries must be > 0")
         return v
 
 

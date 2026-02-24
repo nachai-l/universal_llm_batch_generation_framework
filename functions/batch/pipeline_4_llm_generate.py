@@ -376,7 +376,7 @@ def main(
     model_name = str(params.llm.model_name)
     temperature = float(params.llm.temperature)
     max_retries_outer = int(params.llm.max_retries)
-    runner_max_retries = int(getattr(params.llm, "runner_max_retries", params.llm.max_retries))
+    runner_max_retries = int(params.llm.runner_max_retries if params.llm.runner_max_retries is not None else params.llm.max_retries)
     max_workers = int(getattr(params.llm, "max_workers", 1))
 
     # Cache knobs (pipeline-level)
@@ -455,6 +455,11 @@ def main(
     )
 
     # Pre-scan cache (summary before any LLM run)
+    # Use context-sensitive cache identity: prevents stale hits when context changes
+    # but work_id stays the same (e.g. group context edits between runs).
+    def _context_resolver(item: Any) -> str:
+        return _resolve_context_for_item(item, gc_map)
+
     prescan = pre_scan_cache(
         items=items,
         outputs_dir=out_dir,
@@ -466,6 +471,7 @@ def main(
         temperature=temperature,
         judge_enabled=judge_enabled,
         judge_prompt_sha=judge_prompt_sha,
+        context_resolver=_context_resolver,
     )
 
     # Pre-populate cache hits deterministically (so manifest has full success_files list)
