@@ -10,6 +10,7 @@ import pytest
 
 from functions.core.llm_batch_storage import (
     CachePreScan,
+    context_to_sha,
     pre_scan_cache,
     stable_cache_id,
     write_failure_json,
@@ -204,3 +205,118 @@ def test_write_failure_json_writes_expected_shape(tmp_path: Path):
     assert obj["meta"]["work_id"] == "w1"
     assert obj["error"]["type"] == "RuntimeError"
     assert obj["error"]["message"] == "boom"
+
+
+# -------------------------------------------------------
+# context_sha tests
+# -------------------------------------------------------
+
+
+def test_context_to_sha_deterministic():
+    s1 = context_to_sha("hello world")
+    s2 = context_to_sha("hello world")
+    assert s1 == s2
+    assert isinstance(s1, str)
+    assert len(s1) == 40
+
+
+def test_context_to_sha_differs_for_different_input():
+    assert context_to_sha("a") != context_to_sha("b")
+
+
+def test_stable_cache_id_changes_with_context_sha():
+    base = dict(
+        work_id="w1",
+        prompt_sha="p",
+        schema_sha="s",
+        model_name="m",
+        temperature=0.0,
+        judge_enabled=False,
+        judge_prompt_sha="",
+    )
+    cid_no_ctx = stable_cache_id(**base)
+    cid_with_ctx = stable_cache_id(**base, context_sha="abc123")
+    assert cid_no_ctx != cid_with_ctx
+
+
+def test_stable_cache_id_same_with_empty_context_sha():
+    base = dict(
+        work_id="w1",
+        prompt_sha="p",
+        schema_sha="s",
+        model_name="m",
+        temperature=0.0,
+        judge_enabled=False,
+        judge_prompt_sha="",
+    )
+    cid1 = stable_cache_id(**base)
+    cid2 = stable_cache_id(**base, context_sha="")
+    assert cid1 == cid2
+
+
+@dataclass
+class _CtxItem:
+    work_id: str
+    context: str
+
+
+def test_pre_scan_cache_with_context_resolver(tmp_path: Path):
+    outputs_dir = tmp_path / "llm_outputs"
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+
+    items = [_CtxItem("w1", "ctx_a"), _CtxItem("w2", "ctx_b")]
+
+    # Compute cache_id with context_sha for w1 and pre-populate it as a cache hit
+    ctx_sha_w1 = context_to_sha("ctx_a")
+    cid_w1 = stable_cache_id(
+        work_id="w1",
+        prompt_sha="p",
+        schema_sha="s",
+        model_name="m",
+        temperature=0.0,
+        judge_enabled=False,
+        judge_prompt_sha="",
+        context_sha=ctx_sha_w1,
+    )
+    (outputs_dir / f"{cid_w1}.json").write_text("{}", encoding="utf-8")
+
+    scan = pre_scan_cache(
+        items=items,
+        outputs_dir=outputs_dir,
+        cache_enabled=True,
+        cache_force=False,
+        prompt_sha="p",
+        schema_sha="s",
+        model_name="m",
+        temperature=0.0,
+        judge_enabled=False,
+        judge_prompt_sha="",
+        context_resolver=lambda it: it.context,
+    )
+
+    assert scan.n_cache_skips == 1  # w1 is a hit
+    assert scan.n_will_run == 1  # w2 must run
+    assert scan.runnable_indices == [1]
+    assert scan.cache_id_by_work_id["w1"] == cid_w1
+
+
+def test_pre_scan_cache_context_resolver_empty_context_raises(tmp_path: Path):
+    outputs_dir = tmp_path / "llm_outputs"
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+
+    items = [_CtxItem("w1", "")]
+
+    with pytest.raises(ValueError, match="empty"):
+        pre_scan_cache(
+            items=items,
+            outputs_dir=outputs_dir,
+            cache_enabled=True,
+            cache_force=False,
+            prompt_sha="p",
+            schema_sha="s",
+            model_name="m",
+            temperature=0.0,
+            judge_enabled=False,
+            judge_prompt_sha="",
+            context_resolver=lambda it: it.context,
+        )

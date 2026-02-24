@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from functions.core.llm_batch_storage import stable_cache_id
+from functions.core.llm_batch_storage import context_to_sha, stable_cache_id
 
 
 def _write_json(p: Path, obj) -> None:
@@ -297,6 +297,9 @@ def test_pipeline4_skips_existing_output_when_cache_enabled_and_not_force(tmp_pa
     schema_sha = p4.sha1_file(repo / "schema" / "llm_schema.txt")
     judge_prompt_sha = p4.sha1_file(judge_prompt)
 
+    # Context-sensitive cache: include context_sha matching the resolved group context
+    ctx_sha = context_to_sha("q: hello\nq: world")
+
     cache_id = stable_cache_id(
         work_id="w1",
         prompt_sha=prompt_sha,
@@ -305,6 +308,7 @@ def test_pipeline4_skips_existing_output_when_cache_enabled_and_not_force(tmp_pa
         temperature=0.0,
         judge_enabled=True,
         judge_prompt_sha=judge_prompt_sha,
+        context_sha=ctx_sha,
     )
 
     out_dir = repo / "artifacts" / "cache" / "llm_outputs"
@@ -364,6 +368,9 @@ def test_pipeline4_force_true_overwrites_existing_output(tmp_path, monkeypatch):
     schema_sha = p4.sha1_file(repo / "schema" / "llm_schema.txt")
     judge_prompt_sha = p4.sha1_file(judge_prompt)
 
+    # Context-sensitive cache: include context_sha matching the resolved group context
+    ctx_sha = context_to_sha("q: hello\nq: world")
+
     cache_id = stable_cache_id(
         work_id="w1",
         prompt_sha=prompt_sha,
@@ -372,6 +379,7 @@ def test_pipeline4_force_true_overwrites_existing_output(tmp_path, monkeypatch):
         temperature=0.0,
         judge_enabled=True,
         judge_prompt_sha=judge_prompt_sha,
+        context_sha=ctx_sha,
     )
 
     out_dir = repo / "artifacts" / "cache" / "llm_outputs"
