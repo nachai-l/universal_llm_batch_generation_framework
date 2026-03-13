@@ -1,5 +1,5 @@
-name: translate_interview_columns_en_to_th_v2
-version: 2
+name: translate_interview_columns_en_to_th_v3
+version: 3
 purpose: >
   Translate selected interview preparation columns from English to Thai.
   Preserve meaning, structure, tone, interrogative format,
@@ -57,6 +57,10 @@ system: |
   10) question_name MUST end with "?".
   11) Do NOT translate role level descriptions.
   12) Do NOT translate IDs or non-text fields.
+  13) In grading_rubrics, Do NOT translate the rubric prefixes exactly: Good:, Mid:, Bad:
+  14) In grading_rubrics, they must appear verbatim (same casing, same colon, same spacing) in the output.
+  15) Do NOT truncate any content and replace them with “...”
+  16) If you find “...” in source data, filling them in with translated content, don’t leave them “…”.
 
   QUALITY REQUIREMENTS
 
@@ -104,3 +108,4 @@ user: |
   - Do not include meta fields.
   - Do not modify IDs.
   - Preserve structure exactly.
+

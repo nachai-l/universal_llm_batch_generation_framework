@@ -1,10 +1,11 @@
-name: universal_judge_v5
-version: 5
+name: universal_judge_v6
+version: 6
 purpose: >
   Evaluate whether a GROUP_OUTPUT JSON (one role per generation)
   is schema-compliant, interrogative, junior-aligned, dimension-diverse,
   and consistent with the structured interview evaluation philosophy.
   The judge evaluates only and does not modify content.
+  Also validates that grading_rubrics includes per-section Good/Mid/Bad blocks.
 
 system: |
   HARD RULES
@@ -161,23 +162,41 @@ user: |
     score ≤ 75
 
   ------------------------------------------------
-  6) RUBRIC QUALITY
+  6) RUBRIC STRUCTURE & QUALITY (ENHANCED)
   ------------------------------------------------
-  Each grading_rubrics must include:
+  Each grading_rubrics must include the EXACT labeled sections:
     - Question intent check:
     - Structure check:
     - Depth check:
     - Clarity check:
     - Relevance to role:
 
-  Evaluate:
-  - Sections present and clearly labeled
-  - Rubric references THIS question (not generic template)
-  - Explains how Good vs Mid vs Bad differ
-  - Mentions STAR when relevant (Behavioral)
+  Additionally, for EACH of the 5 sections above:
+  - The section content MUST contain the exact tokens:
+      "Good:"
+      "Mid:"
+      "Bad:"
+    (These must appear as explicit labels, not implied.)
 
-  Minor generalization → small deduction
-  Multiple generic rubrics → score ≤ 75
+  Interpretation rules:
+  - Good/Mid/Bad must be present inside EACH section, not only once globally.
+  - If any section is missing any of Good/Mid/Bad → that question has a rubric-structure defect.
+
+  Rubric quality expectations:
+  - Rubric references THIS question’s intent/dimension (not generic boilerplate only).
+  - Good vs Mid vs Bad differences are explained (not just restated).
+  - STAR is referenced when relevant for Behavioral questions.
+  - Rubric remains junior-aligned and avoids role name.
+
+  Scoring thresholds for rubric issues:
+  - If ANY question is missing one of the 5 labeled sections → FAIL, score ≤ 55
+  - If ≥2 questions have missing per-section Good/Mid/Bad labels → FAIL, score ≤ 60
+  - If exactly 1 question has missing per-section Good/Mid/Bad labels → PASS allowed but deduct; score ≤ 80
+  - If rubrics are present but mostly generic across many questions → score ≤ 75
+
+  When reporting rubric issues in reasons:
+  - Reference the affected question_id(s).
+  - Be specific: e.g., "Rubric missing per-section Good/Mid/Bad in question_id='3' (Depth check)"
 
   ------------------------------------------------
   REQUIRED OUTPUT
@@ -189,13 +208,9 @@ user: |
 
   Reasons must be short and specific.
   Reference question_id when applicable.
-
-  Examples:
-  - "Missing question_ids: ['3']"
-  - "Duplicate question_id='4'"
-  - "Non-interrogative question_id='2'"
-  - "Behavioral question_id='1' includes domain-specific jargon"
-  - "Near-duplicate dimension: question_id='4' vs '5'"
+  - Do NOT mention any specific role title in reasons.
+  - Refer only to "the role" or "the specified role".
+  - If you detect role mismatch, say "role mismatch" without naming any role.
 
   If verdict=FAIL:
     - List the most critical structural issue first.

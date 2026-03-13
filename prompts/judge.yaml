@@ -1,9 +1,10 @@
-name: translation_quality_judge_v2
-version: 2
+name: translation_quality_judge_v3
+version: 3
 purpose: >
   Evaluate whether a row-level English-to-Thai translation
   preserves meaning, structure, interrogative format,
   grading rubric sections, and schema compliance.
+  Also validate strict rubric prefix preservation and no truncation/ellipsis violations.
   The judge evaluates only. It does not modify content.
 
 system: |
@@ -71,7 +72,12 @@ user: |
   3) GENERATED THAI OUTPUT JSON
 
   This is ROW-LEVEL translation.
-  You must evaluate only the translated fields.
+  You must evaluate only the translated fields:
+    - question_name
+    - example_answer_good
+    - example_answer_mid
+    - example_answer_bad
+    - grading_rubrics
 
   ------------------------------------------------
   1) SCHEMA VALIDITY (CRITICAL)
@@ -100,12 +106,12 @@ user: |
     - Relevance to role:
 
   Rules:
-    - Labels must exist exactly as shown.
+    - Labels must exist exactly as shown (case + punctuation).
+    - Section headers must not be translated.
     - Sections must not be merged.
-    - Section headers must not be translated or removed.
-    - Content may be translated, but structure must remain intact.
+    - Content after each label may be Thai but must remain under the correct label.
 
-  If any section missing:
+  If any section missing/translated/merged:
     verdict = FAIL
     score ≤ 50
 
@@ -114,7 +120,7 @@ user: |
   ------------------------------------------------
   question_name must:
     - Be a full interrogative sentence.
-    - End with "?".
+    - End with "?" exactly once (not missing, not "??").
     - Not become a noun phrase.
     - Not become a command.
 
@@ -123,10 +129,47 @@ user: |
     score ≤ 50
 
   ------------------------------------------------
-  4) MEANING PRESERVATION
+  4) RULE 13 CHECK — RUBRIC PREFIX PRESERVATION (CRITICAL)
+  ------------------------------------------------
+  In grading_rubrics:
+  - The exact prefixes "Good: ", "Mid: ", "Bad: " MUST remain in English exactly.
+  - Do NOT allow translations like "ดี:", "ปานกลาง:", "แย่:".
+  - Do NOT allow altered casing/punctuation such as "GOOD:", "Good :", "Good-".
+  - The prefix must appear before its corresponding Thai content.
+
+  If any prefix missing/translated/altered:
+    verdict = FAIL
+    score ≤ 50
+
+  ------------------------------------------------
+  5) RULE 14 CHECK — NO TRUNCATION / NO ADDED ELLIPSIS (CRITICAL)
+  ------------------------------------------------
+  - The Thai output must NOT truncate content compared with ORIGINAL ENGLISH.
+  - The Thai output must NOT introduce new "..." that are not present in the ORIGINAL ENGLISH.
+
+  Practical checks:
+  - If any translated field ends with "...", treat as truncation.
+
+  If truncation or new ellipses are detected:
+    verdict = FAIL
+    score ≤ 50
+
+  ------------------------------------------------
+  6) RULE 15 CHECK — ELLIPSIS HANDLING CONSISTENCY (CRITICAL)
+  ------------------------------------------------
+  Based on the translation prompt contract:
+  - If the ORIGINAL ENGLISH contains "...", the translation must NOT leave it as "..." but fill it with appropriated context.
+  - Therefore:
+    - If ORIGINAL ENGLISH contains "...", and output_json still contains "..." in the same field, FAIL.
+
+  If violated:
+    verdict = FAIL
+    score ≤ 50
+
+  ------------------------------------------------
+  7) MEANING PRESERVATION
   ------------------------------------------------
   Evaluate whether Thai translation:
-
   - Preserves intent and nuance.
   - Preserves scenario details.
   - Preserves evaluation logic in rubrics.
@@ -140,7 +183,7 @@ user: |
     - Loss of differentiation logic
 
   ------------------------------------------------
-  5) QUALITY OF THAI LANGUAGE
+  8) QUALITY OF THAI LANGUAGE
   ------------------------------------------------
   Evaluate:
     - Professional interview tone
@@ -153,7 +196,7 @@ user: |
   may remain in English if appropriate.
 
   ------------------------------------------------
-  6) ANSWER DIFFERENTIATION PRESERVATION
+  9) ANSWER DIFFERENTIATION PRESERVATION
   ------------------------------------------------
   Ensure:
     - Good answer clearly strongest
@@ -180,10 +223,12 @@ user: |
   - Must reference specific fields when possible.
 
   Examples:
+  - "Rubric prefix translated: Good: → ดี:"
+  - "Unexpected ellipsis added in example_answer_good"
+  - "Output ends with '...' indicating truncation"
+  - "Original has '...' but output still contains '...' (Rule 15)"
   - "Missing rubric section: Depth check"
   - "question_name not interrogative"
-  - "Meaning distortion in example_answer_good"
-  - "Schema contains unexpected field: judge_score"
 
   ------------------------------------------------
   OUTPUT SCHEMA (STRUCTURE CONTRACT ONLY)

@@ -1,5 +1,5 @@
 name: interview_prep_question_generation_v8
-version: 9
+version: 10
 purpose: >
   Generate a COMPLETE, dimension-planned interview question set
   for ONE job profile (group_output mode).
@@ -172,49 +172,76 @@ user: |
     - Organizing work under deadline
     - Performing validation before submission
     - Learning a new tool independently
+  
+  BAD ANSWER AND BAD RUBRICS RULE
+    - They should be realistic and commonly-seen junior failure modes; avoid exaggerated arrogance.
+    - Don't output this:
+        • “I make no mistake…” (overconfident)
+        • “I would just pick tasks I like and not tell anyone…”
 
-  GRADING RUBRICS FORMAT (MANDATORY)
-
-  Must contain clearly separated labeled sections (labels must match exactly):
-
+  GRADING RUBRICS FORMAT (MANDATORY — STRUCTURED + DIFFERENTIATION-ENFORCED)
+  
+  The grading_rubrics field must do TWO things:
+  1) Define how evaluators should assess real candidate responses.
+  2) Explicitly justify why example_answer_good, example_answer_mid, and example_answer_bad
+     represent different performance levels for THIS specific question.
+  
+  The rubric must be written in structured prose.
+  No markdown.
+  No bullet fragments.
+  Clear logical sentences only.
+  
+  The rubric MUST contain the following labeled sections (exact labels):
+  
   Question intent check:
   Structure check:
   Depth check:
   Clarity check:
   Relevance to role:
-
-  Rubric expectations:
-
-  - Question intent check:
-      Answer directly addresses what was asked.
-
-  - Structure check:
-      Organized, easy to follow.
-      Behavioral answers should naturally follow STAR when applicable
-      (Situation, Task, Action, Result).
-
-  - Depth check:
-      Contains concrete details.
-      Avoids vague, generic statements.
-
-  - Clarity check:
-      Explanation is understandable and logically sequenced.
-
-  - Relevance to role:
-      Explain fit to the job's junior scope and day-to-day expectations
-      WITHOUT mentioning the job/role name.
-
-  IMPORTANT:
-  The rubric must clearly differentiate:
-
+  
+  Within EACH section, the content MUST follow this internal structure exactly:
+  
   Good:
-    - Specific, structured, reflective, junior-aligned, concrete.
-
   Mid:
-    - Partially structured, somewhat detailed, but lacks depth or clarity.
-
   Bad:
-    - Vague, generic, defensive, avoids responsibility, or misaligned.
+  
+  Formatting rules:
+  - The words "Good:", "Mid:", and "Bad:" must appear explicitly.
+  - Each must contain at least 2 full sentences.
+  - Each must clearly differentiate performance levels.
+  - Each must explain what makes that level strong, acceptable, or weak.
+  - The differentiation must align to the example answers above.
+  
+  The rubric must:
+  - Compare performance levels directly.
+  - Explain WHY the Good example is strong.
+  - Explain WHY the Mid example is only partially sufficient.
+  - Explain WHY the Bad example is insufficient or misaligned.
+  - Reflect junior-level expectations only.
+  - Avoid mentioning the job/role name.
+  
+  ---
+  
+  Rubric Differentiation Expectations:
+  
+  Good:
+  - Direct, complete answer.
+  - Clear structure (STAR where applicable).
+  - Concrete actions and outcomes.
+  - Demonstrates reasoning, ownership, reflection.
+  - Junior-scope realistic.
+  
+  Mid:
+  - Partial answer.
+  - Some structure but missing clarity or depth.
+  - Limited detail or reflection.
+  - Acceptable but not strong.
+  
+  Bad:
+  - Vague, defensive, or generic.
+  - No structure or clear outcome.
+  - Avoids responsibility or lacks reasoning.
+  - Misaligned with junior expectations.
 
   OUTPUT SCHEMA
   {llm_schema}
