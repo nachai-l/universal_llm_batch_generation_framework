@@ -34,8 +34,8 @@ configs/*key*.yaml
 # =========================
 # Raw data
 # =========================
-raw_data/*
-!raw_data/.gitkeep
+#raw_data/*
+#!raw_data/.gitkeep
 
 # =========================
 # Generated archives (timestamped schema copies)
