@@ -2,10 +2,10 @@
   "models": {
     "JudgeResult": {
       "additionalProperties": false,
-      "description": "Schema for the evaluation result provided by the judge model.",
+      "description": "Schema for evaluation results produced by a judge model.\nProvides structured feedback and scoring for validation.",
       "properties": {
         "reasons": {
-          "description": "A list of specific reasons or feedback for the verdict.",
+          "description": "Detailed explanation of the verdict.",
           "items": {
             "type": "string"
           },
@@ -13,14 +13,14 @@
           "type": "array"
         },
         "score": {
-          "description": "The quality score from 0 to 100.",
+          "description": "Quality score from 0 to 100.",
           "maximum": 100,
           "minimum": 0,
           "title": "Score",
           "type": "integer"
         },
         "verdict": {
-          "description": "The final pass/fail decision based on the translation quality.",
+          "description": "The final assessment of the generation.",
           "enum": [
             "PASS",
             "FAIL"
@@ -38,39 +38,63 @@
     },
     "LLMOutput": {
       "additionalProperties": false,
-      "description": "Schema for the translated interview question content from English to Thai.\nIncludes the question, example answers of varying quality, and grading rubrics.",
+      "description": "Schema for bilingual translation output (English to Thai).\nEnsures structural integrity of translated professional interview questions.",
       "properties": {
-        "example_answer_bad": {
-          "description": "The translated low-quality example answer.",
-          "title": "Example Answer Bad",
+        "assumed_level": {
+          "description": "Target seniority or difficulty level.",
+          "title": "Assumed Level",
           "type": "string"
         },
-        "example_answer_good": {
-          "description": "The translated professional, high-quality example answer.",
-          "title": "Example Answer Good",
+        "example_answer_adequate": {
+          "description": "The translated satisfactory model answer.",
+          "title": "Example Answer Adequate",
           "type": "string"
         },
-        "example_answer_mid": {
-          "description": "The translated medium-quality example answer.",
-          "title": "Example Answer Mid",
+        "example_answer_strong": {
+          "description": "The translated high-quality model answer.",
+          "title": "Example Answer Strong",
+          "type": "string"
+        },
+        "example_answer_weak": {
+          "description": "The translated sub-par model answer.",
+          "title": "Example Answer Weak",
           "type": "string"
         },
         "grading_rubrics": {
-          "description": "The translated grading rubrics including required labels for intent, structure, depth, clarity, and relevance.",
+          "description": "The translated evaluation criteria with preserved English headers.",
           "title": "Grading Rubrics",
           "type": "string"
         },
+        "question_id": {
+          "description": "Unique identifier for the question record.",
+          "title": "Question Id",
+          "type": "string"
+        },
         "question_name": {
-          "description": "The translated interview question name. Must end with a question mark.",
+          "description": "The translated title or content of the question.",
           "title": "Question Name",
+          "type": "string"
+        },
+        "question_set": {
+          "description": "Name of the source question dataset.",
+          "title": "Question Set",
+          "type": "string"
+        },
+        "question_type": {
+          "description": "Classification of the question format.",
+          "title": "Question Type",
           "type": "string"
         }
       },
       "required": [
+        "question_id",
+        "question_set",
+        "question_type",
+        "assumed_level",
         "question_name",
-        "example_answer_good",
-        "example_answer_mid",
-        "example_answer_bad",
+        "example_answer_strong",
+        "example_answer_adequate",
+        "example_answer_weak",
         "grading_rubrics"
       ],
       "title": "LLMOutput",

@@ -1,0 +1,269 @@
+name: universal_judge_v11
+version: 11
+purpose: >
+  Evaluate whether a GROUP_OUTPUT JSON (one role per generation)
+  is schema-compliant, interrogative, junior-aligned, dimension-diverse,
+  and consistent with the structured interview evaluation philosophy.
+  The judge evaluates only and does not modify content.
+  Validates that grading_rubrics includes per-section Strong/Adequate/Weak blocks.
+  Supports new input context formats (e.g., PSV rows with Question Set / Question ID / Question Type
+  and role-track metadata).
+  UPDATED: Role name usage is allowed if it appears in INPUT CONTEXT. The judge must not fail for role-name presence alone.
+
+system: |
+  HARD RULES
+  - Return VALID JSON only.
+  - No markdown.
+  - No commentary.
+  - No code fences.
+  - Do NOT regenerate content.
+  - Do NOT repair content.
+  - Do NOT modify output_json.
+  - Only evaluate the provided output_json.
+
+  OUTPUT RULE (CRITICAL)
+  - Return JSON with EXACTLY these keys:
+    verdict, score, reasons
+  - verdict must be EXACTLY "PASS" or "FAIL"
+  - score must be an integer 0-100
+  - reasons must be a list of 1-5 short diagnostic strings
+  - No extra keys. No nested objects.
+
+  BALANCED SCORING DISCIPLINE
+  - Structural violations are critical.
+  - Minor stylistic issues should not heavily penalize.
+  - Dimension overlap should be penalized proportionally.
+  - Strong outputs can score 90+ if clearly high quality.
+  - Do not artificially suppress high scores.
+
+  GLOBAL SCORE GUIDELINES
+  90-100: Strong, consistent, dimension-diverse, junior-aligned.
+  80-89: Solid overall, minor improvements possible.
+  70-79: Acceptable but some weaknesses (repetition, shallow answers).
+  60-69: Noticeable issues affecting quality.
+  40-59: Major structural or alignment problem.
+  <40: Schema failure or severe rule break.
+
+  ROLE NAME HANDLING (UPDATED)
+  - Role title/name references are ALLOWED in output_json IF they appear in INPUT CONTEXT.
+  - Do NOT fail solely for role name presence.
+  - Do NOT mention any specific role title in reasons.
+  - Refer only to "the role" or "the specified role" in reasons.
+
+user: |
+  You will be given:
+  1) OUTPUT SCHEMA (generation schema)
+  2) INPUT CONTEXT (grouped context for ONE role)
+  3) GENERATED OUTPUT JSON
+
+  Mode: GROUP_OUTPUT
+  The output contains MULTIPLE questions for the same role.
+  Evaluate both group-level and per-question quality.
+
+  ------------------------------------------------
+  0) OUTPUT TYPE ASSERTION (CRITICAL)
+  ------------------------------------------------
+  The generated output_json MUST be an instance of LLMOutput, NOT JudgeResult.
+
+  Required:
+  - Top-level must contain "questions" as an array (per schema).
+  - Top-level must NOT contain "verdict"/"score"/"reasons" as the only payload.
+
+  If output_json appears to be JudgeResult-only or missing "questions":
+    verdict = FAIL
+    score ≤ 35
+    reasons should include: "Output is not LLMOutput (questions missing)"
+
+  ------------------------------------------------
+  1) COMPLETENESS (CRITICAL)
+  ------------------------------------------------
+  Extract expected Question IDs from INPUT CONTEXT using ANY of these patterns:
+    - "Question ID:"
+    - "Question ID\t" (tab-separated)
+    - "Question ID," (comma-separated)
+    - A column/field name "Question ID" followed by its value (PSV/CSV-like rows)
+    - If INPUT CONTEXT is JSON-like, extract values where key matches "Question ID" or "question_id"
+
+  Extract produced IDs from output_json.questions[].question_id.
+
+  Requirements:
+  - Same set (no missing, no extra)
+  - Each ID appears exactly once
+
+  If mismatch:
+    verdict = FAIL
+    score ≤ 40
+
+  ------------------------------------------------
+  2) SCHEMA VALIDITY (CRITICAL)
+  ------------------------------------------------
+  - Must match {llm_schema} for LLMOutput.
+  - No missing required fields.
+  - No extra fields (extra=forbid).
+  - Optional passthrough fields are allowed ONLY if they match schema keys:
+      question_set, question_type, assumed_level
+  - Reject non-schema variants (e.g., "Question Set", "Assumed Lv", assumed_lv, questionType).
+  - Do NOT require non-empty strings for optional nullable fields;
+    however, penalize if the model INTRODUCES new empty strings in generated required fields.
+  - No schema echoes inside output_json (e.g., "title", "type", "properties", "$defs", "models").
+
+  Field name expectations (Option 1):
+  - Required example fields should be:
+      example_answer_strong
+      example_answer_adequate
+      example_answer_weak
+  - If legacy fields (example_answer_good/mid/bad) appear, treat as schema/field error.
+
+  If invalid:
+    verdict = FAIL
+    score ≤ 35
+
+  ------------------------------------------------
+  3) QUESTION FORMAT VALIDITY
+  ------------------------------------------------
+  For EACH question_name:
+  - If question_type is "Introduction" (case-insensitive match):
+      - question_name must be EXACTLY "Please introduce yourself."
+  - Else:
+      - Ends with "?" exactly once (not missing, not "??")
+      - Is one interrogative sentence
+      - At least 10 words
+      - Reads like a real interview question
+
+  If one violation:
+    deduct moderately
+  If multiple violations:
+    verdict = FAIL and score ≤ 55
+
+  ------------------------------------------------
+  4) ROLE + LEVEL + TYPE ALIGNMENT
+  ------------------------------------------------
+  Confirm role consistency across set.
+
+  Junior constraints:
+  - No architecture/system design
+  - No enterprise-scale ownership
+  - No strategic roadmap accountability
+  - No senior-level leadership scope
+
+  Behavioral questions:
+    - Must focus on interpersonal judgment, ownership, reflection.
+    - Should NOT depend on domain-specific jargon.
+    - Should be answerable without tools or specialized terminology.
+
+  Situational:
+    - Realistic ambiguity, prioritization, decision logic.
+
+  Specific:
+    - Concrete workflow, applied fundamentals, junior execution scope.
+
+  If a few questions slightly stretch scope:
+    moderate deduction
+  If multiple clearly violate level:
+    verdict = FAIL and score ≤ 60
+
+  ------------------------------------------------
+  5) DIMENSION UNIQUENESS (GROUP LEVEL)
+  ------------------------------------------------
+  Across the full question set:
+  - Each Question ID must target a distinct competency dimension.
+  - Avoid reworded duplicates.
+
+  Penalize proportionally:
+    - Minor thematic similarity → small deduction
+    - Clear overlap in 2 questions → moderate deduction
+    - Repeated dimension pattern → score ≤ 65
+
+  Only FAIL if duplication is severe and systemic.
+
+  ------------------------------------------------
+  6) ANSWER QUALITY & DIFFERENTIATION
+  ------------------------------------------------
+  For EACH question:
+
+  Strong (example_answer_strong):
+    - Concrete
+    - Structured
+    - Junior-realistic
+    - Demonstrates reasoning and reflection
+
+  Adequate (example_answer_adequate):
+    - Partially structured
+    - Some detail but limited depth
+
+  Weak (example_answer_weak):
+    - Clearly weak, vague, defensive, or misaligned
+
+  Evaluate:
+  - Clear differentiation between Strong/Adequate/Weak
+  - Strong answer includes specific actions (not just opinion)
+  - Weak answer clearly illustrates failure pattern
+  - Answers are not extremely short
+  - Generated required fields must not be empty strings
+
+  If multiple questions lack differentiation:
+    score ≤ 75
+
+  ------------------------------------------------
+  7) RUBRIC STRUCTURE & QUALITY (ENHANCED)
+  ------------------------------------------------
+  Each grading_rubrics must include the EXACT labeled sections:
+    - Question intent check:
+    - Structure check:
+    - Depth check:
+    - Clarity check:
+    - Relevance to role:
+
+  Additionally, for EACH of the 5 sections above:
+  - The section content MUST contain the exact tokens:
+      "Strong:"
+      "Adequate:"
+      "Weak:"
+    (These must appear as explicit labels, not implied.)
+
+  Interpretation rules:
+  - Strong/Adequate/Weak must be present inside EACH section, not only once globally.
+  - If any section is missing any of Strong/Adequate/Weak → that question has a rubric-structure defect.
+
+  Rubric quality expectations:
+  - Rubric references THIS question’s intent/dimension (not generic boilerplate only).
+  - Strong vs Adequate vs Weak differences are explained (not just restated).
+  - STAR is referenced when relevant for Behavioral questions.
+  - Rubric remains junior-aligned.
+
+  Scoring thresholds for rubric issues:
+  - If ANY question is missing one of the 5 labeled sections → FAIL, score ≤ 55
+  - If ≥2 questions have missing per-section Strong/Adequate/Weak labels → FAIL, score ≤ 60
+  - If exactly 1 question has missing per-section Strong/Adequate/Weak labels → PASS allowed but deduct; score ≤ 80
+  - If rubrics are present but mostly generic across many questions → score ≤ 75
+
+  When reporting rubric issues in reasons:
+  - Reference the affected question_id(s).
+  - Be specific: e.g., "Rubric missing per-section Strong/Adequate/Weak in question_id='3' (Depth check)"
+
+  ------------------------------------------------
+  8) ROLE NAME POLICY (UPDATED — NO FAIL)
+  ------------------------------------------------
+  - Do NOT fail for role name presence.
+  - If role name appears but is NOT present in INPUT CONTEXT, deduct moderately:
+      score ≤ 80
+      reasons may include: "unexpected role name not found in input context"
+    Do NOT quote the role name.
+
+  ------------------------------------------------
+  REQUIRED OUTPUT
+  ------------------------------------------------
+  Return JSON ONLY:
+  - verdict: "PASS" or "FAIL"
+  - score: integer 0-100
+  - reasons: 1-5 concise diagnostic strings
+
+  Reasons must be short and specific.
+  Reference question_id when applicable.
+  Do NOT mention any specific role title in reasons.
+
+  If verdict=FAIL:
+    - List the most critical structural issue first.
+
+  FINAL RULE:
+  Return JSON ONLY with verdict, score, reasons.

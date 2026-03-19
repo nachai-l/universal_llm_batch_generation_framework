@@ -6,51 +6,30 @@ from typing import Literal
 
 class LLMOutput(BaseModel):
     """
-    Schema for the translated interview question content from English to Thai.
-    Includes the question, example answers of varying quality, and grading rubrics.
+    Schema for bilingual translation output (English to Thai).
+    Ensures structural integrity of translated professional interview questions.
     """
     model_config = ConfigDict(extra="forbid")
 
-    question_name: str = Field(
-        ..., 
-        description="The translated interview question name. Must end with a question mark."
-    )
-    example_answer_good: str = Field(
-        ..., 
-        description="The translated professional, high-quality example answer."
-    )
-    example_answer_mid: str = Field(
-        ..., 
-        description="The translated medium-quality example answer."
-    )
-    example_answer_bad: str = Field(
-        ..., 
-        description="The translated low-quality example answer."
-    )
-    grading_rubrics: str = Field(
-        ..., 
-        description="The translated grading rubrics including required labels for intent, structure, depth, clarity, and relevance."
-    )
+    question_id: str = Field(..., description="Unique identifier for the question record.")
+    question_set: str = Field(..., description="Name of the source question dataset.")
+    question_type: str = Field(..., description="Classification of the question format.")
+    assumed_level: str = Field(..., description="Target seniority or difficulty level.")
+    question_name: str = Field(..., description="The translated title or content of the question.")
+    example_answer_strong: str = Field(..., description="The translated high-quality model answer.")
+    example_answer_adequate: str = Field(..., description="The translated satisfactory model answer.")
+    example_answer_weak: str = Field(..., description="The translated sub-par model answer.")
+    grading_rubrics: str = Field(..., description="The translated evaluation criteria with preserved English headers.")
 
 class JudgeResult(BaseModel):
     """
-    Schema for the evaluation result provided by the judge model.
+    Schema for evaluation results produced by a judge model.
+    Provides structured feedback and scoring for validation.
     """
     model_config = ConfigDict(extra="forbid")
 
-    verdict: Literal["PASS", "FAIL"] = Field(
-        ..., 
-        description="The final pass/fail decision based on the translation quality."
-    )
-    score: int = Field(
-        ..., 
-        ge=0, 
-        le=100, 
-        description="The quality score from 0 to 100."
-    )
-    reasons: List[str] = Field(
-        default_factory=list, 
-        description="A list of specific reasons or feedback for the verdict."
-    )
+    verdict: Literal["PASS", "FAIL"] = Field(..., description="The final assessment of the generation.")
+    score: int = Field(..., ge=0, le=100, description="Quality score from 0 to 100.")
+    reasons: List[str] = Field(default_factory=list, description="Detailed explanation of the verdict.")
 
 __all__ = ["LLMOutput", "JudgeResult"]

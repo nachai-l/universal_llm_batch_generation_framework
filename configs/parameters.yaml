@@ -14,7 +14,7 @@ run:
 # Input table configuration (Pipeline 2)
 # ------------------------------------------------------------
 input:
-  path:  raw_data/tobe_translate.psv # raw_data/input.csv          #
+  path:  raw_data/tobe_translate_v2.psv # raw_data/interview_generation_input.psv # raw_data/input.csv #
   format:  psv # csv #               # csv | psv | tsv | xlsx
   encoding: utf-8
   sheet: null
